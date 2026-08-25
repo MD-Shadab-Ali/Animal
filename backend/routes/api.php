@@ -92,6 +92,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('orders/{orderNumber}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('orders/{orderNumber}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+        Route::post('orders/{orderNumber}/payments', [OrderController::class, 'pay'])
+            ->middleware('throttle:public-forms')
+            ->name('orders.pay');
+        Route::post('orders/{orderNumber}/refunds', [OrderController::class, 'refund'])
+            ->middleware('throttle:public-forms')
+            ->name('orders.refund');
 
         Route::get('addresses', [AddressController::class, 'index'])->name('addresses.index');
         Route::post('addresses', [AddressController::class, 'store'])->name('addresses.store');
@@ -120,6 +126,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('seller.apply');
         Route::get('seller/profile', [SellerAccountController::class, 'show'])->name('seller.profile');
         Route::put('seller/profile', [SellerAccountController::class, 'update'])->name('seller.profile.update');
+        Route::put('seller/payout-details', [SellerAccountController::class, 'updatePayoutDetails'])
+            ->name('seller.payout-details');
+        Route::get('seller/payout-methods', [SellerAccountController::class, 'payoutMethods'])
+            ->name('seller.payout-methods');
         Route::post('seller/documents', [SellerAccountController::class, 'updateDocuments'])
             ->middleware('throttle:public-forms')
             ->name('seller.documents');
@@ -141,6 +151,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 ->name('seller.orders.status');
             Route::get('seller/earnings', [SellerSalesController::class, 'earnings'])->name('seller.earnings');
             Route::get('seller/payouts', [SellerSalesController::class, 'payouts'])->name('seller.payouts');
+            Route::post('seller/payouts', [SellerSalesController::class, 'requestPayout'])
+                ->name('seller.payouts.request');
         });
     });
 });
+
+

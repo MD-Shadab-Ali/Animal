@@ -45,11 +45,34 @@ class CheckoutService
             ]);
         }
 
+        if (! $method->isCheckoutSelectable()) {
+            throw ValidationException::withMessages([
+                'payment_method' => [$method->name.' cannot be used to place an order. '
+                    .'Pick how you want to pay up front — you can settle the rest in cash on delivery.'],
+            ]);
+        }
+
+        // The plan has to be one this method actually offers: you cannot promise
+        // to pay a wallet up front when no account has been set up for it, and a
+        // method that insists on an advance cannot be deferred to the door.
+        $allowed = $method->paymentPlans();
+
+        // Nothing chosen falls back to paying at the door where the method
+        // permits it, which is how every order behaved before plans existed.
+        $plan = $data['payment_plan']
+            ?? (in_array('on_delivery', $allowed, true) ? 'on_delivery' : $allowed[0]);
+
+        if (! in_array($plan, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'payment_plan' => ['That is not an option for '.$method->name.'.'],
+            ]);
+        }
+
         $zone = DeliveryZone::active()->findOrFail($data['delivery_zone_id']);
 
         $lowStockThreshold = (int) Setting::get('low_stock_threshold', 0);
 
-        [$order, $lowStock] = DB::transaction(function () use ($user, $data, $cart, $zone, $method, $lowStockThreshold) {
+        [$order, $lowStock] = DB::transaction(function () use ($user, $data, $cart, $zone, $method, $plan, $lowStockThreshold) {
             $lowStock = [];
             $goatIds = $cart->items->pluck('goat_id')->all();
 
@@ -126,13 +149,16 @@ class CheckoutService
                 'currency'        => Setting::currencyCode(),
 
                 'payment_method'   => $method->code,
+                'payment_plan'     => $plan,
                 'payment_status'   => 'unpaid',
                 'paid_amount'      => 0,
-                // Recorded so staff know what to collect up front; null means the
-                // whole amount is due on delivery.
-                'advance_required' => $method->requires_advance
-                    ? min((float) ($method->advance_amount ?? 0), $total)
-                    : null,
+                // What has to be in before the goat moves. Null means nothing
+                // is wanted until it arrives at the door.
+                'advance_required' => match ($plan) {
+                    'full'    => $total,
+                    'advance' => $method->advanceFor($total),
+                    default   => null,
+                },
                 'status'           => 'pending',
             ]);
 

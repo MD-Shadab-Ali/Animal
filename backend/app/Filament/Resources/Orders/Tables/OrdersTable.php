@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Tables;
 
 use App\Models\Order;
 use App\Models\Setting;
+use App\Services\PaymentService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
@@ -59,6 +60,17 @@ class OrdersTable
                     ->badge()
                     ->color('gray')
                     ->formatStateUsing(fn (?string $state) => strtoupper((string) $state))
+                    ->toggleable(),
+
+                TextColumn::make('payment_plan')
+                    ->label('Plan')
+                    ->badge()
+                    ->color('gray')
+                    ->formatStateUsing(fn (?string $state) => match ($state) {
+                        'full'    => 'Paid up front',
+                        'advance' => 'Advance',
+                        default   => 'On delivery',
+                    })
                     ->toggleable(),
 
                 TextColumn::make('payment_status')
@@ -129,9 +141,19 @@ class OrdersTable
                     ->schema([
                         Select::make('status')
                             ->label('New status')
-                            ->options(Order::STATUSES)
+                            // Delivered means paid for, so it is not on offer
+                            // until the money is in — record the payment and
+                            // the order closes itself.
+                            ->options(fn (Order $record) => collect(Order::STATUSES)
+                                ->reject(fn (string $label, string $status) => $status === 'delivered'
+                                    && $record->status !== 'delivered'
+                                    && ! $record->canBeDelivered())
+                                ->all())
                             ->required()
                             ->native(false)
+                            ->helperText(fn (Order $record) => $record->canBeDelivered()
+                                ? null
+                                : 'This order is not paid for yet, so it cannot be delivered.')
                             ->default(fn (Order $record) => $record->status),
                         Textarea::make('note')
                             ->label('Note (optional)')
@@ -167,17 +189,23 @@ class OrdersTable
                         TextInput::make('transaction_id')
                             ->label('Reference (optional)'),
                     ])
+                    // Through the ledger, never straight onto the order: the
+                    // order's paid_amount is derived from the payments, so a
+                    // direct write here would be silently undone by the next sync.
                     ->action(function (Order $record, array $data): void {
-                        $paid = round((float) $record->paid_amount + (float) $data['amount'], 2);
+                        $payment = app(PaymentService::class)->record($record, [
+                            'amount'                => $data['amount'],
+                            'method'                => $record->payment_method,
+                            'transaction_reference' => $data['transaction_id'] ?: null,
+                        ], auth()->user());
 
-                        $record->update([
-                            'paid_amount'    => $paid,
-                            'transaction_id' => $data['transaction_id'] ?: $record->transaction_id,
-                            'payment_status' => $paid >= (float) $record->total ? 'paid' : 'partially_paid',
-                        ]);
+                        $record->refresh();
 
                         Notification::make()
-                            ->title('Payment recorded for '.$record->order_number)
+                            ->title('Payment '.$payment->reference.' recorded')
+                            ->body($record->status === 'delivered'
+                                ? $record->order_number.' is settled and now marked delivered.'
+                                : 'Outstanding: '.number_format($record->balance_due, 2))
                             ->success()
                             ->send();
                     }),

@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\Payouts\Tables;
 
+use App\Models\PaymentMethod;
 use App\Models\Payout;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -22,10 +24,12 @@ class PayoutsTable
             ->columns([
                 TextColumn::make('reference')->searchable()->weight('medium')->copyable(),
 
+                // Deliberately just the name. The phone that used to sit under it
+                // read as the account number repeated — for a wallet the two are
+                // the same number — and contact details belong on the seller.
                 TextColumn::make('seller.farm_name')
                     ->label('Seller')
-                    ->searchable()
-                    ->description(fn (Payout $record) => $record->seller?->contact_phone),
+                    ->searchable(),
 
                 TextColumn::make('items_count')
                     ->label('Sales')
@@ -35,7 +39,23 @@ class PayoutsTable
 
                 TextColumn::make('amount')->money(fn (Payout $record) => $record->currency)->weight('medium'),
 
-                TextColumn::make('method')->placeholder('—')->toggleable(),
+                TextColumn::make('method')
+                    ->label('Send via')
+                    // The column stores the payment method code; show its name.
+                    ->formatStateUsing(fn (?string $state) => $state
+                        ? PaymentMethod::where('code', $state)->value('name') ?? $state
+                        : null)
+                    // The bank sits under the method, since one is useless
+                    // without the other.
+                    ->description(fn (Payout $record) => $record->bank_name)
+                    ->placeholder('Not set'),
+
+                TextColumn::make('account_number')
+                    ->label('Account')
+                    ->copyable()
+                    ->copyMessage('Account number copied')
+                    ->description(fn (Payout $record) => $record->account_name)
+                    ->placeholder('Not set'),
 
                 TextColumn::make('status')
                     ->badge()
@@ -56,7 +76,15 @@ class PayoutsTable
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn (Payout $record) => $record->status !== 'paid')
+                    ->modalHeading(fn (Payout $record) => 'Mark '.$record->reference.' paid')
                     ->schema([
+                        // Read this before confirming, not after — these are the
+                        // details the seller gave when they asked to be paid.
+                        Placeholder::make('destination')
+                            ->label('Send it to')
+                            ->content(fn (Payout $record) => $record->destination
+                                ?: 'This seller has not given any payout details.'),
+
                         TextInput::make('transaction_reference')
                             ->label('Transaction reference')
                             ->helperText('bKash trx id, bank reference, or whatever you have.'),
@@ -93,6 +121,6 @@ class PayoutsTable
                 BulkActionGroup::make([DeleteBulkAction::make()]),
             ])
             ->emptyStateHeading('No payouts yet')
-            ->emptyStateDescription('Settle a seller from the Sellers screen to create one.');
+            ->emptyStateDescription('Sellers request these from their earnings page, or settle one yourself from the Sellers screen.');
     }
 }

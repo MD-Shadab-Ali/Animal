@@ -6,7 +6,10 @@ use App\Models\Goat;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderStatusHistory;
+use App\Models\Seller;
 use App\Notifications\OrderStatusChangedNotification;
+use App\Notifications\SellerOrderCancelledNotification;
+use Illuminate\Validation\ValidationException;
 
 class OrderObserver
 {
@@ -37,10 +40,15 @@ class OrderObserver
             $order->cancelled_at = now();
         }
 
-        // Cash on delivery is settled the moment the goat is handed over.
-        if ($to === 'delivered' && $order->payment_method === 'cod' && $order->payment_status === 'unpaid') {
-            $order->payment_status = 'paid';
-            $order->paid_amount = $order->total;
+        // The last gate before an order closes, and deliberately at the model
+        // rather than in one screen: delivered means paid for, whoever is
+        // asking. Cash on delivery is no exception - the rider's cash is
+        // recorded as a payment, and that is what closes the order.
+        if ($to === 'delivered' && ! $order->canBeDelivered()) {
+            throw ValidationException::withMessages([
+                'status' => ['This order cannot be marked delivered until it is paid for. '
+                    .'Record the payment first and it will close itself.'],
+            ]);
         }
     }
 
@@ -70,6 +78,8 @@ class OrderObserver
                     'fulfilment_status'     => 'cancelled',
                     'fulfilment_updated_at' => now(),
                 ]);
+
+            $this->tellSellers($order);
         }
 
         // Keep the customer informed at every step.
@@ -114,6 +124,28 @@ class OrderObserver
                 'fulfilment_status'     => $target,
                 'fulfilment_updated_at' => now(),
             ]);
+    }
+
+    /**
+     * Anyone who was preparing a goat for this order needs to hear about it.
+     *
+     * A buyer may cancel right up to the handover, so this can arrive while the
+     * animal is penned and ready to load.
+     */
+    private function tellSellers(Order $order): void
+    {
+        $lines = $order->items()->whereNotNull('seller_id')->get();
+
+        if ($lines->isEmpty()) {
+            return;
+        }
+
+        Seller::with('user')
+            ->whereIn('id', $lines->pluck('seller_id')->unique())
+            ->get()
+            ->each(fn (Seller $seller) => $seller->user?->notify(
+                new SellerOrderCancelledNotification($order, $lines->where('seller_id', $seller->id))
+            ));
     }
 
     private function restock(Order $order): void

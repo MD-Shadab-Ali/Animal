@@ -250,8 +250,142 @@ forms 6 a minute, checkout 10 a minute, and everything else 90 a minute.
 | GET | `/seller/orders` | Orders containing their goats, their lines only |
 | PUT | `/seller/order-items/{item}/status` | Move one of their own lines forward (`preparing`, `ready`, `handed_over`) |
 | PUT | `/seller/orders/{orderNumber}/status` | Run a whole order they supplied in full, through to `delivered` |
+| POST | `/orders/{orderNumber}/payments` | Tell us you have paid, with a reference and a receipt |
+| POST | `/orders/{orderNumber}/refunds` | Ask for money back on a cancelled order |
 | GET | `/seller/earnings`, `/seller/payouts` | Statement and payout history |
+| GET | `/seller/payout-methods` | Payment methods an admin opened for payouts |
+| PUT | `/seller/payout-details` | Save where their earnings should be sent |
+| POST | `/seller/payouts` | Request the balance they are owed |
 | GET | `/sellers`, `/sellers/{slug}` | Public seller directory and profile |
+
+---
+
+## Getting paid for an order
+
+Money in is a **ledger**, not two columns on the order. `orders.paid_amount` and
+`orders.payment_status` are derived from the confirmed rows in `payments` and are never
+written by hand, so the order and the money can never drift apart.
+
+```
+buyer sees where to send it  →  buyer pays and says so  →  staff check the account
+                             →  confirmed  →  order settles  →  closes itself
+```
+
+**Where the buyer sends it.** Each payment method has a payee block in **Configuration →
+Payment methods**: account name, account or wallet number, bank, and an optional QR image.
+Filling in the number is what turns on the "Pay for this order" panel on the buyer's order
+page. Cash on delivery has no account, so it never offers one — the rider takes the cash
+and staff record it.
+
+**The buyer commits at checkout.** Once they pick a method they choose a plan, and the
+order remembers it:
+
+| Plan | Wanted up front | Rest |
+|---|---|---|
+| Pay in full now | The whole total | — |
+| Pay an advance now | `advance_percent` of the total (30% by default) | On delivery |
+
+**Money always comes in before the goat goes out.** A method that can take payment online
+offers those two and nothing else — deferring the whole amount on such a method is just
+cash on delivery under another name, and cash on delivery does not place orders.
+
+A third plan, `on_delivery`, still exists but is reachable only through a method with *no*
+payee account, where there is genuinely nowhere to send money in advance. That is what
+keeps a bare install working.
+
+**Cash on delivery is not a way to place an order.** It is how the balance is handed over
+once the goat arrives, so it carries **Only for settling on delivery**: it appears at
+checkout greyed out, explaining itself, and staff record the rider's cash against it later.
+One guard makes that safe — if *nothing else* is active, a delivery-only method stands in
+rather than leaving the shop unable to take an order, which is the state a fresh install
+ships in.
+
+**Setting the advance.** Each method's *Money up front* section takes an amount and says
+how to read it — **a percentage of the order** or **a fixed amount**. Percentage is the
+default, and is usually what you want in a shop whose goats run from 15,000 to 72,000: the
+same flat 5,000 is a third of one animal and a fourteenth of another. Leave the amount
+empty and the site-wide **Advance payment (%)** from Site settings applies. The form shows
+what the setting comes to on a 50,000 order as you type, and an advance is always capped at
+the order total.
+
+**Each plan is asked for exactly what it promised.** *Pay in full* is chased until the
+order is settled. *Advance now, rest on delivery* asks for the advance and then stops —
+once it is in, the panel turns into a receipt telling the buyer to have the remainder ready
+in cash, and only reopens if the order goes out for delivery with money still outstanding.
+A submitted payment also hides the form until staff confirm or reject it, and the API
+refuses a second open claim so a double submit cannot file the same payment twice.
+
+**When the pay panel opens.** Immediately for the two prepay plans — the shop should not
+hold an animal for someone who has put nothing down. A pay-on-delivery order is only asked
+once it is **out for delivery**. An order on an advance is asked for the advance first and
+the balance later, so `amount_due_now` is not always the full balance. Until an admin has
+filled in a payee account for at least one active method the buyer is told we will call
+them instead, and **Configuration → Payment methods** flags the methods still missing one.
+
+**Submitting is a claim, not a receipt.** `POST /orders/{n}/payments` files the amount,
+the transaction reference and an optional screenshot as `pending`. Nothing on the order
+moves until staff confirm it against the real account, in **Sales → Payments** or on the
+order's own Payments tab. Rejecting one puts the balance straight back.
+
+Every row on that screen answers *who paid for which goat*: the payer and their phone, the
+animals the order covers, the amount, the method and the transaction reference — no need
+to open the order to find out what the money was for. Searching by a goat's name finds its
+payments. Staff are emailed the same list when a claim comes in.
+
+**Confirming money confirms the order.** Ticking a payment off in the panel is staff
+saying it really arrived, so the order moves from `pending` to `confirmed` by itself rather
+than asking them to say the same thing again in a second dropdown. It fires only once what
+was promised up front is fully in — a part-paid advance leaves the order merely placed —
+and only from `pending`, so it can never drag a later order backwards.
+
+**Two rules the rest of the system leans on:**
+
+1. **An order cannot be marked delivered until it is paid for.** Enforced on the model, so
+   it holds for staff, for sellers and for any script — not just on one screen. This also
+   protects the money going out: seller earnings settle on `delivered`, so a delivery
+   recorded against an unpaid order would let a seller draw a payout for money the
+   platform never received.
+2. **Paying closes the order.** When the balance is settled on an order that is already
+   `out_for_delivery`, it goes to `delivered` on its own. Deliberately only from that
+   stage — paying for a goat still on the farm must not mark it delivered. Turn the
+   behaviour off with **Mark orders delivered once paid** in Configuration → Site settings
+   → Marketplace.
+
+### Cancelling
+
+A buyer may cancel **at any point up to delivery** — pending, confirmed, preparing or out
+for delivery. A goat is a large purchase and plans change, and until the animal is actually
+with them there is something to call off. Once delivered there is not: that is a return,
+which is a conversation rather than a button.
+
+Cancelling puts the goats back on sale, cancels every line on the order, and — since it can
+now land while a seller has the animal penned and ready to load — **tells any seller
+involved**. If money had already been received it stays on the books as a refund owed.
+
+### Refunds
+
+A cancelled order does not un-charge itself. If the buyer had paid an advance, that money
+is still ours to give back, and it stays on the books until it is.
+
+```
+buyer cancels  →  order page says what they paid  →  they ask for it back,
+               →  saying where to send it  →  Sales → Refunds  →  staff send it
+               →  mark refunded  →  the order's received total drops to zero
+```
+
+Refunds are rows in the same `payments` ledger with `type = refund`, so they simply
+subtract — "what did we actually take" stays one sum. They carry their own destination
+(`refund_to_*`), because the account money should go back to is not always the one it came
+from: a wallet payment may need returning to a bank, and only the buyer can say.
+
+**Sales → Refunds** is the screen for it: a *To send* tab with a red badge for anything
+owed, the account to send to, the goats the order covered, and **Mark refunded** /
+**Decline** actions. Marking one refunded drops the order's received total and sets its
+payment status to `refunded`; declining leaves the money exactly where it was and lets the
+buyer ask again. Staff can also raise one directly from an order's Payments tab with
+**Kind: Refund** — useful for a partial refund such as a cancellation fee.
+
+**Sales → Payments** now shows money coming in only; refunds have their own screen.
 
 ---
 
@@ -259,8 +393,10 @@ forms 6 a minute, checkout 10 a minute, and everything else 90 a minute.
 
 The checkout reads `payment_methods` from the database, so a new gateway is:
 
-1. Enable the row in **Configuration → Payment methods** (bKash and bank transfer
-   are already seeded, switched off) and put its keys in the `config` JSON column.
+1. Enable the row in **Configuration → Payment methods** (eSewa, Khalti and bank
+   transfer are already seeded, switched off) and put its keys in the `config` JSON
+   column. Turn on **Available for seller payouts** too if money can also be sent
+   out through it.
 2. Handle the new `code` in
    [`app/Services/CheckoutService.php`](backend/app/Services/CheckoutService.php)
    where the order is created.
@@ -293,7 +429,9 @@ suspending a seller pulls every one of their goats out of the shop immediately.
 | `/seller/earnings` | Seller | Per-sale statement and payout history |
 | `/sellers/{slug}` | Anyone | Public farm profile with their live goats |
 | Admin → Marketplace → Sellers | Staff | Approve, reject, suspend, set commission, trigger payouts |
-| Admin → Marketplace → Payouts | Staff | Mark paid or failed |
+| Admin → Sales → Payments | Staff | Every rupee in — confirm or reject what buyers submit |
+| Admin → Sales → Refunds | Staff | Every rupee back out — send what cancelled orders owe |
+| Admin → Marketplace → Payouts | Staff | Mark paid or failed, including payouts sellers requested |
 | Admin → Catalog → Goats | Staff | Approve or reject listings, with a reason sent to the seller |
 
 ### Applying to sell
@@ -321,6 +459,38 @@ a settled sale. House stock (no seller) carries no commission.
 Earnings become payable only once an order is **delivered**. A payout stamps its
 `payout_id` onto the lines it settles inside a transaction, so the same earning can never
 be paid twice; marking a payout failed releases those lines back into the queue.
+
+**Sellers ask to be paid themselves**, from `/seller/earnings`. They pick a method, save
+the account it goes to, and request their balance; the request lands in **Admin →
+Marketplace → Payouts** as `pending` for staff to send and mark paid.
+
+The account it should go to is **copied onto the payout when it is raised**, the same way
+commission is snapshotted onto an order line, and shown on the list, on the payout itself
+and in the *Mark paid* dialog. That is deliberate rather than a live lookup: a seller who
+changes their bank afterwards must not silently redirect money already queued, and once
+sent, the payout is the record of where it went. The guards are the
+same ones an admin settlement obeys — approved seller, delivered earnings, above the
+minimum — plus one more: only one payout may be in flight at a time.
+
+Which methods a seller may choose is admin-controlled. A payment method has two
+independent switches in **Configuration → Payment methods**:
+
+| Toggle | Means |
+|---|---|
+| Active at checkout | Buyers can pick it when they order |
+| Available for seller payouts | Sellers can be paid out through it |
+| Ask the seller for their bank name | The payout form also demands a bank name |
+
+Cash on delivery is checkout-only; the wallets and bank transfer carry money both ways.
+
+The third toggle exists because the two kinds of account are not the same shape. A wallet
+number identifies the account by itself, so eSewa and Khalti ask only for the name on the
+account and the number. A bank account number does not — it is meaningless without the
+bank — so **Bank Transfer** ships with this on and the form asks for the bank as well,
+marks it required, and refuses the save without it. Which methods behave this way is data,
+not code: switch it on for a new bank added in the panel and the storefront form follows.
+Until at least one method has the payout toggle on, the earnings page says payouts are
+not open yet rather than offering a button that cannot work.
 
 The commission rate, minimum payout, and whether applications are open at all are
 settings in **Configuration → Site settings → Marketplace**.

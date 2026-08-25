@@ -17,7 +17,8 @@ class Order extends Model
         'address_line', 'area', 'city', 'postal_code', 'order_notes',
         'subtotal', 'discount', 'delivery_charge', 'total', 'currency',
         'delivery_seller_id', 'delivery_earning', 'delivery_payout_id',
-        'payment_method', 'payment_status', 'paid_amount', 'advance_required', 'transaction_id',
+        'payment_method', 'payment_plan', 'payment_status', 'paid_amount',
+        'advance_required', 'transaction_id',
         'status', 'admin_note', 'delivered_at', 'cancelled_at',
     ];
 
@@ -43,6 +44,12 @@ class Order extends Model
         'out_for_delivery' => 'Out for delivery',
         'delivered'        => 'Delivered',
         'cancelled'        => 'Cancelled',
+    ];
+
+    public const PAYMENT_PLANS = [
+        'full'        => 'Paid in full up front',
+        'advance'     => 'Advance now, rest on delivery',
+        'on_delivery' => 'Pay on delivery',
     ];
 
     public const STATUS_COLORS = [
@@ -79,6 +86,11 @@ class Order extends Model
         return $this->belongsTo(Coupon::class);
     }
 
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->latest();
+    }
+
     public function statusHistories(): HasMany
     {
         return $this->hasMany(OrderStatusHistory::class)->latest();
@@ -88,6 +100,76 @@ class Order extends Model
     public function getBalanceDueAttribute(): float
     {
         return round((float) $this->total - (float) $this->paid_amount, 2);
+    }
+
+    /**
+     * The money is all in.
+     *
+     * A cent of tolerance, because the total and the sum of the payments are
+     * two separate decimal roundings and must not disagree over 0.001.
+     */
+    public function isFullyPaid(): bool
+    {
+        return (float) $this->paid_amount + 0.01 >= (float) $this->total;
+    }
+
+    /**
+     * Nothing is handed over before it is paid for.
+     *
+     * This also protects the seller side of the book: earnings settle on
+     * `delivered`, so a delivery recorded against an unpaid order would let a
+     * seller draw a payout for money the platform never received.
+     */
+    public function canBeDelivered(): bool
+    {
+        return $this->isFullyPaid();
+    }
+
+    /**
+     * What the buyer owes *right now*.
+     *
+     * On an advance plan that is the advance until it is covered, and the rest
+     * only once the goat is on its way. On the other plans it is simply the
+     * outstanding balance.
+     */
+    public function getAmountDueNowAttribute(): float
+    {
+        if ($this->payment_plan === 'advance' && $this->awaiting_advance) {
+            return round((float) $this->advance_required - (float) $this->paid_amount, 2);
+        }
+
+        return $this->balance_due;
+    }
+
+    /**
+     * Money we are holding that is no longer ours.
+     *
+     * `paid_amount` is already net of any refund that has gone out, so what is
+     * left on a cancelled order is exactly what is owed back.
+     */
+    public function getRefundableAmountAttribute(): float
+    {
+        if ($this->status !== 'cancelled') {
+            return 0.0;
+        }
+
+        return round((float) $this->paid_amount, 2);
+    }
+
+    public function isRefundable(): bool
+    {
+        return $this->refundable_amount > 0;
+    }
+
+    /** The buyer can be asked for money now rather than at the door. */
+    public function expectsPaymentUpFront(): bool
+    {
+        return in_array($this->payment_plan, ['full', 'advance'], true);
+    }
+
+    public function getPaymentPlanLabelAttribute(): string
+    {
+        return self::PAYMENT_PLANS[$this->payment_plan] ?? $this->payment_plan;
     }
 
     /** An advance was asked for but has not been received yet. */
@@ -160,9 +242,17 @@ class Order extends Model
         return $from !== false && $to !== false && $to > $from;
     }
 
+    /**
+     * The buyer may still call it off.
+     *
+     * Right up to the handover: a goat is a large purchase and plans change,
+     * and until the animal is actually with the buyer there is something to
+     * call off. Once delivered there is not — that is a return, not a
+     * cancellation, and it is a conversation rather than a button.
+     */
     public function isCancellable(): bool
     {
-        return in_array($this->status, ['pending', 'confirmed'], true);
+        return ! in_array($this->status, ['delivered', 'cancelled'], true);
     }
 
     public function getStatusLabelAttribute(): string

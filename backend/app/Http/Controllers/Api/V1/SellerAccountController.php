@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SellerProfileResource;
 use App\Models\Goat;
 use App\Models\OrderItem;
+use App\Models\PaymentMethod;
 use App\Models\Seller;
 use App\Models\Setting;
 use App\Models\User;
@@ -14,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class SellerAccountController extends Controller
@@ -112,9 +114,12 @@ class SellerAccountController extends Controller
             'area'                => ['nullable', 'string', 'max:255'],
             'city'                => ['required', 'string', 'max:255'],
             'postal_code'         => ['nullable', 'string', 'max:20'],
-            'payout_method'       => ['nullable', 'string', 'max:60'],
+            'payout_method'       => ['nullable', 'string', 'max:60', Rule::in($this->payoutMethodCodes())],
+            'payout_bank_name'    => ['nullable', 'string', 'max:255'],
             'payout_account_name' => ['nullable', 'string', 'max:255'],
             'payout_account_number' => ['nullable', 'string', 'max:60'],
+        ], [
+            'payout_method.in' => 'That payout method is not available.',
         ]);
 
         $seller->update($data);
@@ -217,6 +222,89 @@ class SellerAccountController extends Controller
         }
 
         return $stored;
+    }
+
+    /**
+     * The rails a seller may be paid on.
+     *
+     * These are the payment methods an admin switched on *and* marked as
+     * payout-capable, so the storefront never offers something staff cannot
+     * actually send money through.
+     */
+    public function payoutMethods(): JsonResponse
+    {
+        return response()->json([
+            'data' => PaymentMethod::payout()
+                ->orderBy('sort_order')
+                ->get()
+                ->map(fn (PaymentMethod $method) => [
+                    'code'               => $method->code,
+                    'name'               => $method->name,
+                    'instructions'       => $method->instructions,
+                    'logo'               => $method->logo_url,
+                    'requires_bank_name' => $method->requires_bank_name,
+                ])
+                ->values(),
+        ]);
+    }
+
+    /**
+     * Save where the seller wants their earnings sent.
+     *
+     * Split out from the full profile update so changing a bank account does
+     * not mean resubmitting the whole farm profile from the earnings page.
+     */
+    public function updatePayoutDetails(Request $request): JsonResponse
+    {
+        $seller = $request->user()->seller;
+
+        abort_if(! $seller, 403, 'You do not have a seller account.');
+
+        $chosen = $request->string('payout_method')->toString();
+
+        $data = $request->validate([
+            'payout_method'         => ['required', 'string', 'max:60', Rule::in($this->payoutMethodCodes())],
+            'payout_account_name'   => ['required', 'string', 'max:255'],
+            'payout_account_number' => ['required', 'string', 'max:60'],
+
+            // Only bank transfers need one, and the method decides that, so a
+            // wallet is never asked for a bank it does not have.
+            'payout_bank_name'      => [
+                Rule::requiredIf(fn () => $this->methodNeedsBankName($chosen)),
+                'nullable', 'string', 'max:255',
+            ],
+        ], [
+            'payout_method.in'                => 'That payout method is not available.',
+            'payout_method.required'          => 'Choose how you want to be paid.',
+            'payout_account_name.required'    => 'Enter the name on the account.',
+            'payout_account_number.required'  => 'Enter the account or wallet number.',
+            'payout_bank_name.required'       => 'Enter the name of your bank.',
+        ]);
+
+        // A wallet has no bank, so switching to one clears a bank left behind
+        // by a previous choice rather than leaving a misleading value on file.
+        $data['payout_bank_name'] = $this->methodNeedsBankName($chosen)
+            ? $data['payout_bank_name']
+            : null;
+
+        $seller->update($data);
+
+        return response()->json([
+            'message' => 'Payout details saved.',
+            'data'    => new SellerProfileResource($seller->fresh()),
+        ]);
+    }
+
+    /** @return array<int, string> */
+    private function payoutMethodCodes(): array
+    {
+        return PaymentMethod::payout()->pluck('code')->all();
+    }
+
+    private function methodNeedsBankName(?string $code): bool
+    {
+        return filled($code)
+            && (bool) PaymentMethod::where('code', $code)->value('requires_bank_name');
     }
 
     /** Headline numbers for the seller dashboard. */

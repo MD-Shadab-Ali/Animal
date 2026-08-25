@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
+import PayoutPanel from '@/components/seller/PayoutPanel';
 
 const sum = (rows, key) => rows.reduce((total, row) => total + Number(row[key] || 0), 0);
 
@@ -14,6 +15,10 @@ export default function SellerEarningsPage() {
 
   const [earnings, setEarnings] = useState(null);
   const [payouts, setPayouts] = useState([]);
+
+  // Bumped after a payout is requested or the payout details change, so the
+  // balances, the history and the button state all reload together.
+  const [reloads, setReloads] = useState(0);
 
   useEffect(() => {
     if (!token) return;
@@ -27,7 +32,7 @@ export default function SellerEarningsPage() {
         setPayouts(payoutsResponse.data || []);
       })
       .catch(() => setEarnings(false));
-  }, [token]);
+  }, [token, reloads]);
 
   if (earnings === null) {
     return <div className="panel text-center py-5"><span className="spinner-border text-brand" /></div>;
@@ -37,7 +42,8 @@ export default function SellerEarningsPage() {
     return <div className="panel"><p className="mb-0 text-soft">Could not load your earnings right now.</p></div>;
   }
 
-  const { summary, lines } = earnings;
+  const { summary, lines, payout } = earnings;
+  const reload = () => setReloads((count) => count + 1);
 
   return (
     <div className="d-grid gap-4">
@@ -60,6 +66,8 @@ export default function SellerEarningsPage() {
         ))}
       </div>
 
+      <PayoutPanel payout={payout} unpaid={summary.unpaid} onRequested={reload} />
+
       <div className="panel">
         <h2 className="h6 mb-3">Payouts</h2>
 
@@ -75,23 +83,25 @@ export default function SellerEarningsPage() {
                 <tr className="small text-soft">
                   <th>Reference</th>
                   <th>Amount</th>
+                  <th>Method</th>
                   <th>Sales</th>
                   <th>Status</th>
                   <th>Paid</th>
                 </tr>
               </thead>
               <tbody>
-                {payouts.map((payout) => (
-                  <tr key={payout.reference}>
-                    <td className="fw-semibold text-ink">{payout.reference}</td>
-                    <td>{formatMoney(payout.amount, settings)}</td>
-                    <td>{payout.items_count}</td>
+                {payouts.map((entry) => (
+                  <tr key={entry.reference}>
+                    <td className="fw-semibold text-ink">{entry.reference}</td>
+                    <td>{formatMoney(entry.amount, settings)}</td>
+                    <td className="small text-soft">{entry.method_label || '—'}</td>
+                    <td>{entry.items_count}</td>
                     <td>
-                      <span className={`status-pill ${payout.status === 'paid' ? 'text-bg-success' : 'text-bg-warning'}`}>
-                        {payout.status_label}
+                      <span className={`status-pill ${entry.status === 'paid' ? 'text-bg-success' : 'text-bg-warning'}`}>
+                        {entry.status_label}
                       </span>
                     </td>
-                    <td className="small text-soft">{payout.paid_at ? formatDate(payout.paid_at) : '—'}</td>
+                    <td className="small text-soft">{entry.paid_at ? formatDate(entry.paid_at) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

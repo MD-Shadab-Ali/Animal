@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Models\DeliveryZone;
+use App\Models\Order;
 use App\Models\PaymentMethod;
 use App\Models\Setting;
 use App\Services\CheckoutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CheckoutController extends Controller
 {
@@ -40,8 +42,24 @@ class CheckoutController extends Controller
                         'logo'             => $method->logo_url,
                         'requires_advance' => $method->requires_advance,
                         'advance_amount'   => $method->advance_amount !== null ? (float) $method->advance_amount : null,
+                        // Whether that number is rupees or a percentage.
+                        'advance_type'     => $method->advance_type,
+
+                        // Which of "all of it / part of it / nothing yet" this
+                        // method allows, and where the money would go.
+                        'plans'            => $method->paymentPlans(),
+                        'payee'            => $method->payeeDetails(),
+
+                        // Shown but not choosable: cash on delivery settles the
+                        // balance at the door, it does not start an order.
+                        'selectable'         => $method->isCheckoutSelectable(),
+                        'unavailable_reason' => $method->checkoutUnavailableReason(),
                     ]),
 
+                'payment_plans' => Order::PAYMENT_PLANS,
+                // The share of the total an advance comes to, so the storefront
+                // can show the figure before the order exists.
+                'advance_percent'  => (float) Setting::get('advance_percent', 30),
                 'min_order_amount' => (float) Setting::get('min_order_amount', 0),
             ],
         ]);
@@ -60,6 +78,9 @@ class CheckoutController extends Controller
             'order_notes'      => ['nullable', 'string', 'max:1000'],
             'delivery_zone_id' => ['required', 'exists:delivery_zones,id'],
             'payment_method'   => ['required', 'string', 'exists:payment_methods,code'],
+            // Optional: left out, the method's own default applies, which for
+            // cash on delivery is exactly what it always was.
+            'payment_plan'     => ['nullable', 'string', Rule::in(array_keys(Order::PAYMENT_PLANS))],
             'save_address'     => ['nullable', 'boolean'],
         ]);
 

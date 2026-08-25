@@ -34,6 +34,7 @@ export default function CheckoutPage() {
     order_notes: '',
     delivery_zone_id: '',
     payment_method: '',
+    payment_plan: '',
     save_address: true,
   });
 
@@ -70,7 +71,11 @@ export default function CheckoutPage() {
           customer_phone: current.customer_phone || user?.phone || '',
           customer_email: current.customer_email || user?.email || '',
           delivery_zone_id: current.delivery_zone_id || data.delivery_zones?.[0]?.id || '',
-          payment_method: current.payment_method || data.payment_methods?.[0]?.code || '',
+          // Default to the first method that can actually place an order —
+          // cash on delivery sits at the top of the list but only settles it.
+          payment_method: current.payment_method
+            || (data.payment_methods || []).find((method) => method.selectable !== false)?.code
+            || '',
         }));
 
         const preferred = (addressResponse.data || []).find((address) => address.is_default);
@@ -94,9 +99,23 @@ export default function CheckoutPage() {
     ? (selectedZone.free_above !== null && subtotalAfterDiscount >= selectedZone.free_above ? 0 : selectedZone.charge)
     : null;
 
-  const selectedMethod = options?.payment_methods?.find(
+  const chosenMethod = options?.payment_methods?.find(
     (method) => method.code === form.payment_method
   );
+
+  // Derived, not synced: if the chosen method turns out to be delivery-only
+  // (an admin can flip that at any time) fall back to the first usable one.
+  const selectedMethod = chosenMethod?.selectable === false
+    ? options?.payment_methods?.find((method) => method.selectable !== false)
+    : chosenMethod;
+
+  // What the order will come to, which is what an advance is a share of.
+  const orderTotal = subtotalAfterDiscount + Number(deliveryCharge || 0);
+
+  // A plan only means something for the method it belongs to. Derive it rather
+  // than syncing state, so switching method can never leave a stale choice.
+  const plans = selectedMethod?.plans || [];
+  const paymentPlan = plans.includes(form.payment_plan) ? form.payment_plan : (plans[0] || '');
 
   const submit = async (event) => {
     event.preventDefault();
@@ -104,7 +123,15 @@ export default function CheckoutPage() {
     setErrors({});
 
     try {
-      const response = await apiFetch('/checkout', { method: 'POST', token, body: form });
+      const response = await apiFetch('/checkout', {
+        method: 'POST',
+        token,
+        body: {
+          ...form,
+          payment_method: selectedMethod?.code || form.payment_method,
+          payment_plan: paymentPlan,
+        },
+      });
       await refresh();
       toast.success(response.message);
       router.push(`/account/orders/${response.data.order_number}?placed=1`);
@@ -168,6 +195,8 @@ export default function CheckoutPage() {
                 selectedZone={selectedZone}
                 selectedMethod={selectedMethod}
                 subtotalAfterDiscount={subtotalAfterDiscount}
+                orderTotal={orderTotal}
+                paymentPlan={paymentPlan}
               />
             </div>
 
@@ -188,7 +217,9 @@ export default function CheckoutPage() {
               </button>
 
               <p className="small text-soft text-center mt-2 mb-0">
-                You will not be charged online. Payment is collected on delivery.
+                {paymentPlan === 'on_delivery' || !paymentPlan
+                  ? 'Nothing is charged online. Payment is collected on delivery.'
+                  : 'We will show you where to send the money as soon as the order is placed.'}
               </p>
             </div>
           </div>

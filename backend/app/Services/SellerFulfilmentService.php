@@ -53,6 +53,15 @@ class SellerFulfilmentService
             ]);
         }
 
+        // Caught here as well as in the model so the seller gets an answer that
+        // makes sense on their own screen rather than a bare validation error.
+        if ($status === 'delivered' && ! $order->canBeDelivered()) {
+            throw ValidationException::withMessages([
+                'status' => ['We have not received payment for this order yet. '
+                    .'It closes itself once the buyer has paid.'],
+            ]);
+        }
+
         $order->update([
             'status'     => $status,
             'admin_note' => $note ? trim($order->admin_note."

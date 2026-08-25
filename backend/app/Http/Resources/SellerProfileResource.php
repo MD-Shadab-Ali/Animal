@@ -43,6 +43,7 @@ class SellerProfileResource extends JsonResource
             'commission_rate' => $this->effective_commission_rate,
             'payout' => [
                 'method'       => $this->payout_method,
+                'bank_name'    => $this->payout_bank_name,
                 'account_name' => $this->payout_account_name,
                 // Only the tail of the account number is ever echoed back.
                 'account_hint' => $this->payout_account_number

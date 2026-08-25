@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import OrderPayment from '@/components/account/OrderPayment';
+import OrderRefund from '@/components/account/OrderRefund';
 import OrderTimeline from '@/components/account/OrderTimeline';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
@@ -28,7 +31,14 @@ export default function OrderDetailPage() {
 
   const [order, setOrder] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
+  // Bumped after a payment is submitted so the balance and the history reload.
+  const [reloads, setReloads] = useState(0);
+
+  // The ?placed=1 flag lives in the URL, so it outlives whatever happens to the
+  // order next. Greeting someone with "your order is in" after they cancelled
+  // it — or after it has already moved on — is worse than saying nothing.
   const justPlaced = searchParams.get('placed') === '1';
 
   useEffect(() => {
@@ -37,11 +47,10 @@ export default function OrderDetailPage() {
     apiFetch(`/orders/${number}`, { token })
       .then((response) => setOrder(response.data))
       .catch(() => setOrder(false));
-  }, [token, number]);
+  }, [token, number, reloads]);
 
   const cancel = async () => {
-    if (!window.confirm('Cancel this order? The goat goes back on sale.')) return;
-
+    setConfirmingCancel(false);
     setCancelling(true);
     try {
       const response = await apiFetch(`/orders/${number}/cancel`, { method: 'POST', token });
@@ -72,9 +81,34 @@ export default function OrderDetailPage() {
     );
   }
 
+  // Cancelling is allowed right up to the handover, so by now the goat may be
+  // penned and the money may already be ours. Say both, if either is true.
+  const paidSoFar = Number(order?.totals?.paid || 0);
+
+  const cancelWarnings = [
+    'The goat goes back on sale, and we will let the farm know.',
+    order.status === 'out_for_delivery'
+      ? 'It is already on its way to you, so please tell us as soon as you can.'
+      : '',
+    paidSoFar > 0
+      ? `You have paid ${formatMoney(paidSoFar, settings)} — you can ask for it back afterwards.`
+      : '',
+  ];
+
   return (
     <div className="d-grid gap-4">
-      {justPlaced && (
+      <ConfirmDialog
+        open={confirmingCancel}
+        title={`Cancel order ${order.order_number}?`}
+        lines={cancelWarnings}
+        confirmLabel="Yes, cancel it"
+        cancelLabel="Keep my order"
+        busy={cancelling}
+        onConfirm={cancel}
+        onCancel={() => setConfirmingCancel(false)}
+      />
+
+      {justPlaced && order.status === 'pending' && (
         <div className="alert alert-success mb-0">
           <i className="bi bi-check-circle-fill me-2" />
           Thanks — your order is in. We will call {order.customer.phone} to confirm before delivery.
@@ -92,14 +126,27 @@ export default function OrderDetailPage() {
           </div>
 
           {order.is_cancellable && (
-            <button className="btn btn-outline-danger btn-sm" onClick={cancel} disabled={cancelling}>
+            <button
+              className="btn btn-outline-danger btn-sm"
+              onClick={() => setConfirmingCancel(true)}
+              disabled={cancelling}
+            >
               {cancelling ? 'Cancelling…' : 'Cancel order'}
             </button>
           )}
         </div>
 
-        <OrderTimeline status={order.status} />
+        <OrderTimeline
+          status={order.status}
+          paid={order.refund?.amount || 0}
+          refunded={order.refund?.sent || 0}
+          formatAmount={(amount) => formatMoney(amount, settings)}
+        />
       </div>
+
+      <OrderPayment order={order} onPaid={() => setReloads((count) => count + 1)} />
+
+      <OrderRefund order={order} onRequested={() => setReloads((count) => count + 1)} />
 
       <div className="panel">
         <h2 className="h6 mb-3">Items</h2>
@@ -157,7 +204,11 @@ export default function OrderDetailPage() {
             <h2 className="h6 mb-3">Payment</h2>
             <dl className="row small mb-0">
               <dt className="col-7 fw-normal text-soft">Method</dt>
-              <dd className="col-5 text-end text-uppercase">{order.payment_method}</dd>
+              <dd className="col-5 text-end">
+                {order.payment?.status === 'paid'
+                  ? <span className="text-success">Paid</span>
+                  : <span className="text-soft text-uppercase">{order.payment_method}</span>}
+              </dd>
 
               <dt className="col-7 fw-normal text-soft">Subtotal</dt>
               <dd className="col-5 text-end">{formatMoney(order.totals.subtotal, settings)}</dd>
@@ -176,6 +227,35 @@ export default function OrderDetailPage() {
               <dd className="col-5 text-end fw-bold text-brand pt-2 border-top">
                 {formatMoney(order.totals.total, settings)}
               </dd>
+
+              {order.totals.paid > 0 && (
+                <>
+                  <dt className="col-7 fw-normal text-soft">Received</dt>
+                  <dd className="col-5 text-end text-success">
+                    {formatMoney(order.totals.paid, settings)}
+                  </dd>
+                </>
+              )}
+
+              {order.status === 'cancelled' ? (
+                order.refund?.amount > 0 && (
+                  <>
+                    <dt className="col-7 fw-semibold">To be refunded</dt>
+                    <dd className="col-5 text-end fw-semibold text-danger">
+                      {formatMoney(order.refund.amount, settings)}
+                    </dd>
+                  </>
+                )
+              ) : (
+                order.totals.balance_due > 0 && (
+                  <>
+                    <dt className="col-7 fw-semibold">Still to pay</dt>
+                    <dd className="col-5 text-end fw-semibold">
+                      {formatMoney(order.totals.balance_due, settings)}
+                    </dd>
+                  </>
+                )
+              )}
             </dl>
           </div>
         </div>

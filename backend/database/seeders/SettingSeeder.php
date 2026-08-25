@@ -51,6 +51,8 @@ class SettingSeeder extends Seeder
             ['marketplace', 'default_commission_rate', '10', 'number', 'Commission rate (%)', 'Taken from each sale. Individual sellers can be given their own rate'],
             ['marketplace', 'seller_applications_open', '1', 'boolean', 'Accept new seller applications'],
             ['marketplace', 'min_payout_amount', '2000', 'number', 'Minimum payout amount'],
+            ['marketplace', 'advance_percent', '30', 'number', 'Advance payment (%)', 'How much of the order a buyer pays up front when they choose to pay an advance'],
+            ['marketplace', 'auto_deliver_on_payment', '1', 'boolean', 'Mark orders delivered once paid', 'Close an order that is already out for delivery as soon as the balance is settled'],
             ['marketplace', 'seller_terms', 'Sellers are responsible for the accuracy of every listing. Animals must be healthy, correctly weighed and available on the day of sale.', 'textarea', 'Seller terms'],
 
             // ── Appearance ───────────────────────────────────────────

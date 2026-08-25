@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Sellers\Schemas;
 
+use App\Models\PaymentMethod;
 use App\Models\Setting;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -105,7 +106,24 @@ class SellerForm
                 ->collapsed()
                 ->columns(3)
                 ->schema([
-                    TextInput::make('payout_method')->placeholder('bKash / Bank transfer'),
+                    Select::make('payout_method')
+                        ->label('Payout method')
+                        // The list is whatever Configuration -> Payment methods
+                        // marks as a payout rail, so this never drifts from what
+                        // the seller sees on their earnings page.
+                        ->options(fn () => PaymentMethod::payout()
+                            ->orderBy('sort_order')
+                            ->pluck('name', 'code'))
+                        ->helperText('Only methods switched on for payouts appear here.')
+                        ->native(false)
+                        ->searchable()
+                        ->live(),
+                    TextInput::make('payout_bank_name')
+                        ->label('Bank name')
+                        // Wallets have no bank, so the field only appears for the
+                        // methods that were marked as needing one.
+                        ->visible(fn ($get) => (bool) PaymentMethod::where('code', $get('payout_method'))
+                            ->value('requires_bank_name')),
                     TextInput::make('payout_account_name'),
                     TextInput::make('payout_account_number'),
                 ]),

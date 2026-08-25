@@ -19,7 +19,8 @@ class Seller extends Model
         'contact_phone', 'contact_email', 'address_line', 'area', 'city', 'postal_code',
         'status', 'national_id', 'id_document', 'trade_licence', 'review_note',
         'approved_at', 'approved_by',
-        'commission_rate', 'payout_method', 'payout_account_name', 'payout_account_number',
+        'commission_rate', 'payout_method', 'payout_bank_name',
+        'payout_account_name', 'payout_account_number',
     ];
 
     protected function casts(): array
@@ -110,6 +111,36 @@ class Seller extends Model
     public function isApproved(): bool
     {
         return $this->status === 'approved';
+    }
+
+    /** Money can only be sent once we know the rail and the account. */
+    public function hasPayoutDetails(): bool
+    {
+        if (blank($this->payout_method)
+            || blank($this->payout_account_name)
+            || blank($this->payout_account_number)
+        ) {
+            return false;
+        }
+
+        // A bank account number is not enough to send to on its own, so methods
+        // that are bank transfers say so and the bank name becomes mandatory.
+        return ! $this->payoutMethodNeedsBankName() || filled($this->payout_bank_name);
+    }
+
+    public function payoutMethodNeedsBankName(): bool
+    {
+        return filled($this->payout_method)
+            && (bool) PaymentMethod::where('code', $this->payout_method)->value('requires_bank_name');
+    }
+
+    /** The payout already asked for and not yet settled, if there is one. */
+    public function pendingPayout(): ?Payout
+    {
+        return $this->payouts()
+            ->whereIn('status', ['pending', 'processing'])
+            ->latest()
+            ->first();
     }
 
     /** Their own rate if set, otherwise the platform default. */

@@ -8,12 +8,24 @@ const STEPS = [
   ['delivered', 'Delivered'],
 ];
 
-export default function OrderTimeline({ status }) {
+export default function OrderTimeline({ status, paid = 0, refunded = 0, formatAmount }) {
   if (status === 'cancelled') {
+    // "Nothing has been charged" is only true when nothing was. Telling a buyer
+    // who paid an advance that their money never left is the worst possible
+    // thing this box could say.
+    const money = (amount) => (formatAmount ? formatAmount(amount) : amount);
+
     return (
-      <div className="alert alert-danger mb-0 d-flex align-items-center gap-2" style={{ borderRadius: 'var(--radius-md)' }}>
-        <i className="bi bi-x-circle-fill" aria-hidden="true" />
-        This order was cancelled. Nothing has been charged.
+      <div className="alert alert-danger mb-0 d-flex align-items-start gap-2" style={{ borderRadius: 'var(--radius-md)' }}>
+        <i className="bi bi-x-circle-fill mt-1" aria-hidden="true" />
+        <span>
+          This order was cancelled.{' '}
+          {paid > 0
+            ? `You paid ${money(paid)}, which is yours to have back.`
+            : refunded > 0
+              ? `The ${money(refunded)} you paid has been refunded.`
+              : 'Nothing has been charged.'}
+        </span>
       </div>
     );
   }

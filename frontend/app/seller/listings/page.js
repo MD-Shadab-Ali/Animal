@@ -8,6 +8,7 @@ import ListingStatusPill from '@/components/seller/ListingStatusPill';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { formatMoney } from '@/lib/format';
 
 const FILTERS = [
@@ -26,6 +27,7 @@ function ListingsInner() {
   const [listings, setListings] = useState(null);
   const [filter, setFilter] = useState(searchParams.get('approval_status') || '');
   const [busy, setBusy] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   const load = useCallback(async (status) => {
     if (!token) return;
@@ -74,9 +76,9 @@ function ListingsInner() {
     }
   };
 
-  const remove = async (listing) => {
-    if (!window.confirm(`Delete "${listing.name}"?`)) return;
-
+  const remove = async () => {
+    const listing = deleting;
+    setDeleting(null);
     setBusy(listing.id);
     try {
       const response = await apiFetch(`/seller/listings/${listing.id}`, { method: 'DELETE', token });
@@ -91,6 +93,17 @@ function ListingsInner() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title={deleting ? `Delete "${deleting.name}"?` : 'Delete this listing?'}
+        lines={['This removes the draft for good. Listings that have already sold cannot be deleted.']}
+        confirmLabel="Delete it"
+        cancelLabel="Keep it"
+        busy={Boolean(busy)}
+        onConfirm={remove}
+        onCancel={() => setDeleting(null)}
+      />
+
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <h1 className="h4 mb-0">My listings</h1>
         <Link href="/seller/listings/new" className="btn btn-cta">
@@ -176,7 +189,7 @@ function ListingsInner() {
                 {listing.approval_status === 'draft' && (
                   <button
                     className="btn btn-link btn-sm text-danger"
-                    onClick={() => remove(listing)}
+                    onClick={() => setDeleting(listing)}
                     disabled={busy === listing.id}
                   >
                     Delete

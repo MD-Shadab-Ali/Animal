@@ -114,19 +114,25 @@ class OrderOwnershipTest extends TestCase
         $this->assertNull($order->soleSellerId());
     }
 
-    public function test_the_seller_can_run_their_own_order_to_delivered(): void
+    public function test_the_seller_runs_their_own_order_and_payment_closes_it(): void
     {
         $order = $this->orderFor([$this->sellerGoat()->id]);
 
         Sanctum::actingAs($this->seller->user);
 
-        foreach (['confirmed', 'processing', 'out_for_delivery', 'delivered'] as $status) {
+        foreach (['confirmed', 'processing', 'out_for_delivery'] as $status) {
             $this->putJson("/api/v1/seller/orders/{$order->order_number}/status", ['status' => $status])
                 ->assertOk()
                 ->assertJsonPath('data.status', $status);
         }
 
-        $this->assertSame('delivered', $order->fresh()->status);
+        // An unpaid order is not deliverable, however far along it is.
+        $this->putJson("/api/v1/seller/orders/{$order->order_number}/status", ['status' => 'delivered'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status');
+
+        // ...and once the money is in, nobody has to click anything.
+        $this->assertSame('delivered', $this->payInFull($order)->status);
     }
 
     public function test_a_seller_cannot_run_an_order_that_includes_house_stock(): void

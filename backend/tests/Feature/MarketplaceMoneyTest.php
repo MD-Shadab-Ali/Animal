@@ -165,7 +165,7 @@ class MarketplaceMoneyTest extends TestCase
         $this->assertEquals(0, $this->seller->fresh()->lifetime_earnings);
         $this->assertEquals($expected, $this->seller->fresh()->pending_earnings);
 
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $this->assertEquals($expected, $this->seller->fresh()->unpaid_earnings);
         $this->assertEquals($expected, $this->seller->fresh()->lifetime_earnings);
@@ -188,7 +188,7 @@ class MarketplaceMoneyTest extends TestCase
         Notification::fake();
 
         $order = $this->buy();
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $payout = app(PayoutService::class)->settle($this->seller->fresh());
 
@@ -211,7 +211,7 @@ class MarketplaceMoneyTest extends TestCase
         Setting::where('key', 'min_payout_amount')->first()->update(['value' => '50000']);
 
         $order = $this->buy();
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $this->expectException(ValidationException::class);
         app(PayoutService::class)->settle($this->seller->fresh());
@@ -222,7 +222,7 @@ class MarketplaceMoneyTest extends TestCase
         Notification::fake();
 
         $order = $this->buy();
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $service = app(PayoutService::class);
         $payout = $service->settle($this->seller->fresh());
@@ -241,7 +241,7 @@ class MarketplaceMoneyTest extends TestCase
         Notification::fake();
 
         $order = $this->buy();
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $service = app(PayoutService::class);
         $payout = $service->markPaid($service->settle($this->seller->fresh()), 'BKASH-9911');

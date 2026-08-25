@@ -10,7 +10,8 @@ class Payout extends Model
 {
     protected $fillable = [
         'reference', 'seller_id', 'amount', 'currency', 'status',
-        'method', 'transaction_reference', 'note', 'paid_at', 'created_by',
+        'method', 'bank_name', 'account_name', 'account_number',
+        'transaction_reference', 'note', 'paid_at', 'created_by',
     ];
 
     protected function casts(): array
@@ -34,6 +35,27 @@ class Payout extends Model
         'paid'       => 'success',
         'failed'     => 'danger',
     ];
+
+    /** The method's display name; the row stores its code. */
+    public function getMethodLabelAttribute(): ?string
+    {
+        return $this->method
+            ? PaymentMethod::where('code', $this->method)->value('name') ?? $this->method
+            : null;
+    }
+
+    /** Everything staff need to send the money, on one line. */
+    public function getDestinationAttribute(): ?string
+    {
+        $parts = array_filter([
+            $this->method_label,
+            $this->bank_name,
+            $this->account_name,
+            $this->account_number,
+        ]);
+
+        return $parts ? implode(' · ', $parts) : null;
+    }
 
     public function seller(): BelongsTo
     {

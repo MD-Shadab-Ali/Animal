@@ -108,7 +108,7 @@ class SellerLineDrivesOrderTest extends TestCase
         $this->assertEquals(0, $seller->lifetime_earnings, 'Nothing is earned before delivery');
         $this->assertEquals($expected, $seller->pending_earnings, 'It should show as still in flight');
 
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
         $seller = $seller->fresh();
 
         $this->assertEquals($expected, $seller->unpaid_earnings);

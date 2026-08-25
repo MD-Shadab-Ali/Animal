@@ -31,12 +31,18 @@ class CommerceSeeder extends Seeder
             );
         }
 
+        // Cash on delivery has no account to send to: the rider takes the cash
+        // and staff record it, which is what closes the order.
         PaymentMethod::updateOrCreate(
             ['code' => 'cod'],
             [
                 'name'             => 'Cash on Delivery',
-                'instructions'     => 'Pay the full amount in cash when the goat is delivered. Please keep exact change ready.',
+                'instructions'     => 'Settle the remaining balance in cash when your goat is delivered. Please keep the exact change ready.',
                 'is_active'        => true,
+                // Visible at checkout but not choosable: it settles an order,
+                // it does not start one.
+                'on_delivery_only' => true,
+                'supports_payout'  => false,
                 'requires_advance' => false,
                 'sort_order'       => 1,
             ]
@@ -46,17 +52,22 @@ class CommerceSeeder extends Seeder
         // Nepali wallets, seeded switched off until their keys are added in the
         // admin panel under Configuration -> Payment methods.
         foreach ([
-            ['esewa', 'eSewa', 'Pay from your eSewa wallet. You will be sent to eSewa to confirm.'],
-            ['khalti', 'Khalti', 'Pay with Khalti wallet, card or mobile banking.'],
-            ['bank_transfer', 'Bank Transfer', 'Transfer to our bank account and share the reference number.'],
-        ] as $i => [$code, $name, $instructions]) {
+            ['esewa', 'eSewa', 'Pay from your eSewa wallet. You will be sent to eSewa to confirm.', false],
+            ['khalti', 'Khalti', 'Pay with Khalti wallet, card or mobile banking.', false],
+            // A wallet number stands alone; a bank account number needs the bank.
+            ['bank_transfer', 'Bank Transfer', 'Transfer to our bank account and share the reference number.', true],
+        ] as $i => [$code, $name, $instructions, $needsBank]) {
             PaymentMethod::updateOrCreate(
                 ['code' => $code],
                 [
-                    'name'         => $name,
-                    'instructions' => $instructions,
-                    'is_active'    => false,
-                    'sort_order'   => $i + 2,
+                    'name'            => $name,
+                    'instructions'    => $instructions,
+                    'is_active'       => false,
+                    // Wallets and bank transfer move money both ways, so they are
+                    // payout rails the moment an admin switches them on.
+                    'supports_payout' => true,
+                    'requires_bank_name' => $needsBank,
+                    'sort_order'      => $i + 2,
                 ]
             );
         }

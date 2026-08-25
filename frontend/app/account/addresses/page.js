@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api';
@@ -24,6 +25,7 @@ export default function AddressesPage() {
   const [form, setForm] = useState(BLANK);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   const load = () => {
     apiFetch('/addresses', { token })
@@ -72,8 +74,9 @@ export default function AddressesPage() {
     }
   };
 
-  const remove = async (address) => {
-    if (!window.confirm('Delete this address?')) return;
+  const remove = async () => {
+    const address = deleting;
+    setDeleting(null);
 
     try {
       const response = await apiFetch(`/addresses/${address.id}`, { method: 'DELETE', token });
@@ -105,6 +108,16 @@ export default function AddressesPage() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Delete this address?"
+        lines={[deleting ? `${deleting.label || deleting.full_name} — ${deleting.address_line}, ${deleting.city}` : '', 'You can always add it again later.']}
+        confirmLabel="Delete it"
+        cancelLabel="Keep it"
+        onConfirm={remove}
+        onCancel={() => setDeleting(null)}
+      />
+
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h1 className="h4 mb-0">Addresses</h1>
         {editing === null && (
@@ -181,7 +194,7 @@ export default function AddressesPage() {
 
                 <div className="d-flex gap-2">
                   <button className="btn btn-outline-secondary btn-sm" onClick={() => openEdit(address)}>Edit</button>
-                  <button className="btn btn-link btn-sm text-danger" onClick={() => remove(address)}>Delete</button>
+                  <button className="btn btn-link btn-sm text-danger" onClick={() => setDeleting(address)}>Delete</button>
                 </div>
               </div>
             </div>

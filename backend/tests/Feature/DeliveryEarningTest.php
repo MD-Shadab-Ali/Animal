@@ -106,7 +106,7 @@ class DeliveryEarningTest extends TestCase
         $this->assertEquals(22500 + $delivery, $seller->pending_earnings);
         $this->assertEquals(0, $seller->unpaid_earnings);
 
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
         $seller = $seller->fresh();
 
         $this->assertEquals(22500 + $delivery, $seller->unpaid_earnings);
@@ -119,7 +119,7 @@ class DeliveryEarningTest extends TestCase
         $order = $this->order([$this->goat($this->seller, 'Payout Goat')->id]);
         $delivery = (float) $order->delivery_charge;
 
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $payout = app(PayoutService::class)->settle($this->seller->fresh());
 
@@ -133,7 +133,7 @@ class DeliveryEarningTest extends TestCase
         $order = $this->order([$this->goat($this->seller, 'Failed Payout Goat')->id]);
         $delivery = (float) $order->delivery_charge;
 
-        $order->update(['status' => 'delivered']);
+        $this->markDelivered($order);
 
         $service = app(PayoutService::class);
         $payout = $service->settle($this->seller->fresh());

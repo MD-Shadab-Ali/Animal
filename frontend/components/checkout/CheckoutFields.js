@@ -2,9 +2,41 @@
 
 import { formatMoney } from '@/lib/format';
 
+const PLAN_LABELS = {
+  full: {
+    title: 'Pay in full now',
+    hint: 'The whole amount up front. Nothing to hand over at the door.',
+  },
+  advance: {
+    title: 'Pay an advance now',
+    hint: 'Reserve the goat today and settle the rest when it arrives.',
+  },
+  on_delivery: {
+    title: 'Pay on delivery',
+    hint: 'Nothing now — pay when the goat reaches you.',
+  },
+};
+
+/** What the buyer hands over today under each plan. */
+function planAmount(plan, total, method, options) {
+  if (plan === 'full') return total;
+  if (plan === 'on_delivery') return 0;
+
+  // The method may set its own advance, as rupees or as a share of the order;
+  // with nothing set it falls back to the site-wide percentage.
+  const advance = method?.advance_amount == null
+    ? total * ((options?.advance_percent ?? 30) / 100)
+    : (method.advance_type === 'fixed'
+      ? method.advance_amount
+      : total * (method.advance_amount / 100));
+
+  return Math.min(Math.round(advance * 100) / 100, total);
+}
+
 export default function CheckoutFields({
   form, errors, update, addresses, applyAddress,
-  options, settings, selectedZone, selectedMethod, subtotalAfterDiscount,
+  options, settings, selectedZone, selectedMethod, subtotalAfterDiscount, orderTotal,
+  paymentPlan,
 }) {
   const field = (key, label, { type = 'text', required = false, colClass = 'col-md-6', as = 'input', rows } = {}) => (
     <div className={colClass} key={key}>
@@ -142,13 +174,22 @@ export default function CheckoutFields({
 
         <div className="d-grid gap-2">
           {(options?.payment_methods || []).map((method) => {
-            const selected = form.payment_method === method.code;
+            // Compare against the derived method, so a stale delivery-only
+            // choice never shows as ticked.
+            const selected = selectedMethod?.code === method.code;
+
+            // Delivery-only methods stay on the list so the buyer can see how
+            // they will settle up, but they cannot start an order.
+            const disabled = method.selectable === false;
 
             return (
               <label
                 key={method.code}
-                className={`d-flex gap-3 p-3 border rounded ${selected ? 'border-2' : ''}`}
-                style={selected ? { borderColor: 'var(--brand-primary)' } : undefined}
+                className={`d-flex gap-3 p-3 border rounded ${selected ? 'border-2' : ''} ${disabled ? 'bg-body-secondary' : ''}`}
+                style={{
+                  ...(selected ? { borderColor: 'var(--brand-primary)' } : {}),
+                  ...(disabled ? { opacity: 0.75, cursor: 'not-allowed' } : {}),
+                }}
               >
                 <input
                   type="radio"
@@ -157,10 +198,21 @@ export default function CheckoutFields({
                   value={method.code}
                   checked={selected}
                   onChange={update('payment_method')}
+                  disabled={disabled}
                 />
                 <span className="flex-grow-1">
-                  <strong className="d-block">{method.name}</strong>
-                  {method.instructions && <span className="small text-soft">{method.instructions}</span>}
+                  <strong className="d-block">
+                    {method.name}
+                    {disabled && (
+                      <span className="badge text-bg-secondary ms-2 align-middle">On delivery only</span>
+                    )}
+                  </strong>
+
+                  {/* The reason replaces the how-to-pay blurb — that blurb
+                      describes settling up later, not placing an order. */}
+                  <span className="small text-soft">
+                    {disabled ? method.unavailable_reason : method.instructions}
+                  </span>
                 </span>
                 {method.logo && <img src={method.logo} alt={method.name} style={{ height: 24 }} />}
               </label>
@@ -168,9 +220,60 @@ export default function CheckoutFields({
           })}
         </div>
 
-        {selectedMethod?.requires_advance && selectedMethod.advance_amount && (
+        {/* Always shown, even when the method allows only one answer: the buyer
+            should never reach "Place order" unsure what they owe today. */}
+        {(selectedMethod?.plans?.length || 0) > 0 && (
+          <div className="mt-4">
+            <h3 className="h6 mb-1">
+              {selectedMethod.plans.length > 1 ? 'When would you like to pay?' : 'When you pay'}
+            </h3>
+            <p className="small text-soft mb-3">
+              {selectedMethod.requires_advance
+                ? `${selectedMethod.name} needs money up front — we hold the goat once it is in.`
+                : 'We hold the goat for you once the money is in.'}
+            </p>
+
+            {errors.payment_plan && (
+              <div className="alert alert-danger py-2 small">{errors.payment_plan[0]}</div>
+            )}
+
+            <div className="d-grid gap-2">
+              {selectedMethod.plans.map((plan) => {
+                const selected = paymentPlan === plan;
+                const amount = planAmount(plan, orderTotal, selectedMethod, options);
+
+                return (
+                  <label
+                    key={plan}
+                    className={`d-flex gap-3 p-3 border rounded ${selected ? 'border-2' : ''}`}
+                    style={selected ? { borderColor: 'var(--brand-primary)' } : undefined}
+                  >
+                    <input
+                      type="radio"
+                      className="form-check-input mt-1"
+                      name="payment_plan"
+                      value={plan}
+                      checked={selected}
+                      onChange={update('payment_plan')}
+                      disabled={selectedMethod.plans.length === 1}
+                    />
+                    <span className="flex-grow-1">
+                      <strong className="d-block">{PLAN_LABELS[plan]?.title}</strong>
+                      <span className="small text-soft">{PLAN_LABELS[plan]?.hint}</span>
+                    </span>
+                    <span className="fw-bold text-brand text-nowrap">
+                      {amount > 0 ? formatMoney(amount, settings) : 'Nothing now'}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {selectedMethod?.requires_advance && (selectedMethod.plans || []).indexOf('on_delivery') === -1 && (
           <div className="alert alert-warning small mt-3 mb-0">
-            This method needs an advance of {formatMoney(selectedMethod.advance_amount, settings)} to reserve the goat.
+            {selectedMethod.name} needs money up front to reserve the goat.
           </div>
         )}
       </section>

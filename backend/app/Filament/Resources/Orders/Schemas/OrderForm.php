@@ -128,42 +128,66 @@ class OrderForm
                     ->columns(2)
                     ->schema([
                         Select::make('status')
-                            ->options(Order::STATUSES)
+                            // Delivered is not offered until the money is in.
+                            // Record the payment and the order closes itself.
+                            ->options(fn (?Order $record) => collect(Order::STATUSES)
+                                // reject() hands the callback (value, key); for
+                                // STATUSES that is (label, status).
+                                ->reject(fn (string $label, string $status) => $status === 'delivered'
+                                    && $record
+                                    && $record->status !== 'delivered'
+                                    && ! $record->canBeDelivered())
+                                ->all())
                             ->required()
                             ->native(false)
                             // Orders supplied entirely by one seller are run by that
                             // seller; staff watch and can still cancel from the list.
                             ->disabled(fn (?Order $record): bool => $record?->isSellerManaged() ?? false)
-                            ->helperText(fn (?Order $record): string => $record?->isSellerManaged()
-                                ? 'Run by '.($record->items->first()?->seller_name ?? 'the seller')
-                                  .'. They move it forward; you can still cancel it from the orders list.'
-                                : 'Every change is written to the order history below.'),
+                            ->helperText(function (?Order $record): string {
+                                if ($record?->isSellerManaged()) {
+                                    return 'Run by '.($record->items->first()?->seller_name ?? 'the seller')
+                                        .'. They move it forward; you can still cancel it from the orders list.';
+                                }
 
-                        Select::make('payment_status')
-                            ->options([
-                                'unpaid'         => 'Unpaid',
+                                if ($record && ! $record->canBeDelivered()) {
+                                    return 'Delivered is unavailable until this order is paid for — record the '
+                                        .'payment on the Payments tab and it will close itself.';
+                                }
+
+                                return 'Every change is written to the order history below.';
+                            }),
+
+                        TextInput::make('payment_status')
+                            ->label('Payment')
+                            ->formatStateUsing(fn (?string $state) => match ($state) {
                                 'partially_paid' => 'Partially paid',
-                                'paid'           => 'Paid',
-                                'refunded'       => 'Refunded',
-                            ])
-                            ->required()
-                            ->native(false),
+                                default          => ucfirst((string) $state),
+                            })
+                            ->disabled()
+                            ->helperText('Worked out from the payments below — record one there to change it.'),
+
+                        TextInput::make('payment_plan')
+                            ->label('Agreed at checkout')
+                            ->formatStateUsing(fn (?string $state) => Order::PAYMENT_PLANS[$state] ?? $state)
+                            ->disabled(),
 
                         TextInput::make('advance_required')
-                            ->label('Advance required')
+                            ->label('Wanted up front')
                             ->disabled()
                             ->prefix(fn () => Setting::currencySymbol())
-                            ->helperText('Set by the payment method at checkout. Blank means pay in full on delivery.'),
+                            ->helperText(fn (?Order $record) => match (true) {
+                                $record?->payment_plan === 'on_delivery' => 'Nothing — the buyer pays at the door.',
+                                (bool) $record?->awaiting_advance        => 'Still outstanding.',
+                                default                                  => 'Received.',
+                            }),
 
                         TextInput::make('paid_amount')
                             ->label('Amount received')
-                            ->numeric()
-                            ->minValue(0)
-                            ->default(0),
-
-                        TextInput::make('transaction_id')
-                            ->label('Transaction reference')
-                            ->maxLength(255),
+                            ->disabled()
+                            ->prefix(fn () => Setting::currencySymbol())
+                            ->helperText(fn (?Order $record) => $record && $record->balance_due > 0
+                                ? 'Outstanding: '.Setting::currencySymbol().number_format($record->balance_due, 2)
+                                : 'Settled in full.'),
 
                         Textarea::make('admin_note')
                             ->label('Internal note')

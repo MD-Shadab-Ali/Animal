@@ -39,7 +39,7 @@ class AdminPanelTest extends TestCase
             'goats', 'categories', 'orders', 'coupons', 'users', 'reviews',
             'banners', 'home-sections', 'pages', 'menus', 'testimonials', 'faqs',
             'posts', 'post-categories', 'contact-messages', 'inquiries',
-            'subscribers', 'delivery-zones', 'payment-methods', 'sellers', 'payouts',
+            'subscribers', 'delivery-zones', 'payment-methods', 'sellers', 'payouts', 'payments', 'refunds',
         ];
 
         foreach ($slugs as $slug) {

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PaymentMethod;
 use App\Models\Payout;
 use App\Models\Seller;
 use App\Models\Setting;
@@ -65,9 +66,16 @@ class PayoutService
                 'amount'     => $amount,
                 'currency'   => Setting::currencyCode(),
                 'status'     => 'pending',
-                'method'     => $seller->payout_method,
                 'note'       => $note,
                 'created_by' => $createdBy?->id,
+
+                // Snapshotted, not looked up later: staff pay against what the
+                // seller asked for, and a seller changing their bank afterwards
+                // must not silently redirect a payout already in the queue.
+                'method'         => $seller->payout_method,
+                'bank_name'      => $seller->payout_bank_name,
+                'account_name'   => $seller->payout_account_name,
+                'account_number' => $seller->payout_account_number,
             ]);
 
             OrderItem::whereKey($items->pluck('id'))->update(['payout_id' => $payout->id]);
@@ -75,6 +83,43 @@ class PayoutService
 
             return $payout->load('items');
         });
+    }
+
+    /**
+     * A payout the seller asked for themselves.
+     *
+     * Everything about the money is identical to an admin settlement, so this
+     * only adds the guards a self-service request needs: an approved seller,
+     * somewhere to send the money, and no request already in flight. The row
+     * lands as `pending` for staff to action, exactly like an admin-created one.
+     */
+    public function request(Seller $seller): Payout
+    {
+        if (! $seller->isApproved()) {
+            throw ValidationException::withMessages([
+                'payout' => ['Your seller account is not approved yet.'],
+            ]);
+        }
+
+        if (! $seller->hasPayoutDetails()) {
+            throw ValidationException::withMessages([
+                'payout' => ['Add your payout method and account details first.'],
+            ]);
+        }
+
+        if (! PaymentMethod::payout()->where('code', $seller->payout_method)->exists()) {
+            throw ValidationException::withMessages([
+                'payout' => ['Your saved payout method is no longer available. Please pick another one.'],
+            ]);
+        }
+
+        if ($seller->payouts()->whereIn('status', ['pending', 'processing'])->exists()) {
+            throw ValidationException::withMessages([
+                'payout' => ['You already have a payout in progress. We will settle it before starting another.'],
+            ]);
+        }
+
+        return $this->settle($seller, $seller->user, 'Requested by the seller.');
     }
 
     public function markPaid(Payout $payout, ?string $transactionReference = null): Payout
