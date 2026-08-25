@@ -1,0 +1,19 @@
+# ---- OS / editor junk ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# ---- safety net (each sub-project also has its own .gitignore) ----
+**/node_modules/
+**/vendor/
+**/.next/
+**/.env
+**/.env.local
+**/.env.*.local
+*.log
+
+# ---- stray ----
+~/
