@@ -52,11 +52,12 @@ class CommerceSeeder extends Seeder
         // Nepali wallets, seeded switched off until their keys are added in the
         // admin panel under Configuration -> Payment methods.
         foreach ([
-            ['esewa', 'eSewa', 'Pay from your eSewa wallet. You will be sent to eSewa to confirm.', false],
-            ['khalti', 'Khalti', 'Pay with Khalti wallet, card or mobile banking.', false],
-            // A wallet number stands alone; a bank account number needs the bank.
-            ['bank_transfer', 'Bank Transfer', 'Transfer to our bank account and share the reference number.', true],
-        ] as $i => [$code, $name, $instructions, $needsBank]) {
+            ['esewa', 'eSewa', 'Pay from your eSewa wallet. You will be sent to eSewa to confirm.', false, 'straight away'],
+            ['khalti', 'Khalti', 'Pay with Khalti wallet, card or mobile banking.', false, 'straight away'],
+            // A wallet number stands alone; a bank account number needs the bank,
+            // and unlike a wallet it does not settle while you watch.
+            ['bank_transfer', 'Bank Transfer', 'Transfer to our bank account and share the reference number.', true, 'in 1-3 working days'],
+        ] as $i => [$code, $name, $instructions, $needsBank, $refundEta]) {
             PaymentMethod::updateOrCreate(
                 ['code' => $code],
                 [
@@ -67,6 +68,7 @@ class CommerceSeeder extends Seeder
                     // payout rails the moment an admin switches them on.
                     'supports_payout' => true,
                     'requires_bank_name' => $needsBank,
+                    'refund_eta'         => $refundEta,
                     'sort_order'      => $i + 2,
                 ]
             );

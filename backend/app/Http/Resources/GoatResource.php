@@ -29,6 +29,29 @@ class GoatResource extends JsonResource
             'effective_price'   => $this->effective_price,
             'is_on_sale'        => $this->is_on_sale,
             'discount_percent'  => $this->discount_percent,
+            // A listing advertised at one weight can often be supplied heavier.
+            // The rate comes from the asking price and the advertised weight,
+            // so there is nothing extra for a seller to keep in step.
+            'pricing' => [
+                'is_per_kg'     => $this->is_weight_priced,
+                'price_per_kg'  => $this->price_per_kg !== null ? (float) $this->price_per_kg : null,
+                // The weight the asking price belongs to. Prices scale from
+                // here, and the selector opens here, so it is not the same
+                // thing as the lightest weight on offer.
+                'anchor_weight_kg' => $this->is_weight_priced ? $this->anchor_weight : null,
+                'min_weight_kg' => $this->is_weight_priced ? $this->lightest_weight : null,
+                'max_weight_kg' => $this->is_weight_priced ? $this->heaviest_weight : null,
+                'step_kg'       => $this->is_weight_priced ? (float) ($this->weight_step_kg ?: 1) : null,
+                // What it costs at the lightest and the heaviest on offer.
+                'from_price'    => $this->is_weight_priced ? $this->effective_price : null,
+                'to_price'      => $this->is_weight_priced ? $this->heaviest_price : null,
+                // Only worth sending on the detail page, where the selector lives.
+                'options'       => $this->when(
+                    $request->routeIs('*.goats.show') && $this->is_weight_priced,
+                    fn () => $this->weightOptions()
+                ),
+            ],
+
             'stock'             => $this->stock,
             'track_stock'       => $this->track_stock,
             'is_available'      => $this->is_available,

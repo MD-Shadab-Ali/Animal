@@ -136,8 +136,8 @@ class OrdersTable
                     ->label('Update status')
                     ->icon('heroicon-o-arrow-path')
                     ->color('primary')
-                    // Seller-supplied orders are moved by the seller, not by staff.
-                    ->visible(fn (Order $record) => $record->isStaffManaged())
+                    // Staff and the seller both run seller-supplied orders, so
+                    // the control stays available on every order.
                     ->schema([
                         Select::make('status')
                             ->label('New status')

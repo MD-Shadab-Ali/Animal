@@ -12,6 +12,9 @@ class CartItemResource extends JsonResource
         return [
             'id'         => $this->id,
             'quantity'   => $this->quantity,
+            // Which weight this line is. Null on a fixed listing, where the
+            // goat's own weight is the only one there is.
+            'weight_kg'  => (float) $this->weight_kg > 0 ? (float) $this->weight_kg : null,
             'unit_price' => $this->unit_price,
             'line_total' => $this->line_total,
             'goat'       => new GoatResource($this->whenLoaded('goat')),

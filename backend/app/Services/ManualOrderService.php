@@ -97,6 +97,8 @@ class ManualOrderService
                 'subtotal'        => $subtotal,
                 'discount'        => $discount,
                 'delivery_charge' => $delivery,
+                // Same promise a customer would have been shown online.
+                'delivery_estimate' => $zone?->estimated_time,
                 'total'           => $total,
                 'currency'        => Setting::currencyCode(),
 

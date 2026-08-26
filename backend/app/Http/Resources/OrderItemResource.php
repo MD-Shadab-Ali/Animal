@@ -8,6 +8,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class OrderItemResource extends JsonResource
 {
+    /** The state of the order this line belongs to, if the caller knows it. */
+    private ?string $orderStatus = null;
+
+    public function forOrder(?string $status): static
+    {
+        $this->orderStatus = $status;
+
+        return $this;
+    }
+
     public function toArray(Request $request): array
     {
         return [
@@ -17,6 +27,9 @@ class OrderItemResource extends JsonResource
             'sku'        => $this->goat_sku,
             'thumbnail'  => $this->thumbnail_url,
             'slug'       => $this->whenLoaded('goat', fn () => $this->goat?->slug),
+            // What was agreed at the time, not what the listing says now.
+            'weight_kg'    => $this->weight_kg !== null ? (float) $this->weight_kg : null,
+            'price_per_kg' => $this->price_per_kg !== null ? (float) $this->price_per_kg : null,
             'unit_price' => (float) $this->unit_price,
             'quantity'   => $this->quantity,
             'line_total' => (float) $this->line_total,
@@ -24,11 +37,35 @@ class OrderItemResource extends JsonResource
             // Whoever supplied this goat -- a seller or the farm -- moves this
             // along, and the buyer should be able to watch it happen.
             'supplied_by' => $this->seller_name ?: Setting::get('site_name'),
-            'fulfilment'  => [
-                'status'     => $this->fulfilment_status,
-                'label'      => $this->fulfilment_label,
-                'updated_at' => $this->fulfilment_updated_at?->toIso8601String(),
-            ],
+            'fulfilment'  => $this->fulfilmentBlock(),
+        ];
+    }
+
+    /**
+     * How far along this goat is, from the buyer's side of the fence.
+     *
+     * The stored state is the *supplier's* job, and that job genuinely ends at
+     * "handed to the courier" — which is why nothing is stored beyond it, and
+     * why delivery is not duplicated onto every line: it is one fact about the
+     * order, with one timestamp.
+     *
+     * It would just be wrong to keep telling the buyer their goat is with the
+     * courier once it is standing in their yard.
+     */
+    private function fulfilmentBlock(): array
+    {
+        $status = $this->fulfilment_status;
+        $label  = $this->fulfilment_label;
+
+        if ($this->orderStatus === 'delivered' && $status !== 'cancelled') {
+            $status = 'delivered';
+            $label  = 'Delivered';
+        }
+
+        return [
+            'status'     => $status,
+            'label'      => $label,
+            'updated_at' => $this->fulfilment_updated_at?->toIso8601String(),
         ];
     }
 }

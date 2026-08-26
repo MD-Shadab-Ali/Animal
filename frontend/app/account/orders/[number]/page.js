@@ -20,6 +20,9 @@ const ITEM_PROGRESS = {
   preparing: 'text-bg-warning',
   ready: 'text-bg-info',
   handed_over: 'text-bg-success',
+  // Set by the API once the order itself is delivered — the goat is with the
+  // buyer, not with the courier.
+  delivered: 'text-bg-success',
   cancelled: 'text-bg-danger',
 };
 
@@ -32,6 +35,8 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [confirmingReceipt, setConfirmingReceipt] = useState(false);
+  const [receipting, setReceipting] = useState(false);
 
   // Bumped after a payment is submitted so the balance and the history reload.
   const [reloads, setReloads] = useState(0);
@@ -48,6 +53,23 @@ export default function OrderDetailPage() {
       .then((response) => setOrder(response.data))
       .catch(() => setOrder(false));
   }, [token, number, reloads]);
+
+  // The buyer is the one person who actually knows the goat turned up, so
+  // saying so closes the order — which is also what releases the seller's money.
+  const confirmReceipt = async () => {
+    setConfirmingReceipt(false);
+    setReceipting(true);
+
+    try {
+      const response = await apiFetch(`/orders/${number}/received`, { method: 'POST', token });
+      toast.success(response.message);
+      setOrder(response.data);
+    } catch (error) {
+      toast.error(error.message || 'Could not confirm that just now.');
+    } finally {
+      setReceipting(false);
+    }
+  };
 
   const cancel = async () => {
     setConfirmingCancel(false);
@@ -84,6 +106,8 @@ export default function OrderDetailPage() {
   // Cancelling is allowed right up to the handover, so by now the goat may be
   // penned and the money may already be ours. Say both, if either is true.
   const paidSoFar = Number(order?.totals?.paid || 0);
+  const isCancelled = order.status === 'cancelled';
+  const refundSent = Number(order?.refund?.sent || 0);
 
   const cancelWarnings = [
     'The goat goes back on sale, and we will let the farm know.',
@@ -98,6 +122,21 @@ export default function OrderDetailPage() {
   return (
     <div className="d-grid gap-4">
       <ConfirmDialog
+        open={confirmingReceipt}
+        title="Has your goat arrived?"
+        lines={[
+          'Only say yes once the animal is actually with you.',
+          'This closes the order and pays the farm, so it cannot be undone.',
+        ]}
+        confirmLabel="Yes, it arrived"
+        cancelLabel="Not yet"
+        tone="brand"
+        busy={receipting}
+        onConfirm={confirmReceipt}
+        onCancel={() => setConfirmingReceipt(false)}
+      />
+
+      <ConfirmDialog
         open={confirmingCancel}
         title={`Cancel order ${order.order_number}?`}
         lines={cancelWarnings}
@@ -108,10 +147,23 @@ export default function OrderDetailPage() {
         onCancel={() => setConfirmingCancel(false)}
       />
 
+      {/* Deliberately inline, not a modal. The buyer has just finished placing
+          the order and wants to see it; a dialog puts a wall in front of the
+          very thing they came for, to confirm something the page below already
+          proves. It also has to name the *next* step, which depends on how they
+          chose to pay — promising a phone call while a "pay now" panel sits
+          underneath it is worse than saying nothing. */}
       {justPlaced && order.status === 'pending' && (
-        <div className="alert alert-success mb-0">
-          <i className="bi bi-check-circle-fill me-2" />
-          Thanks — your order is in. We will call {order.customer.phone} to confirm before delivery.
+        <div className="alert alert-success mb-0 d-flex gap-3 align-items-start">
+          <i className="bi bi-check-circle-fill fs-5 lh-1 mt-1" aria-hidden="true" />
+          <div>
+            <strong className="d-block">Thanks — order {order.order_number} is in.</strong>
+            <span className="small">
+              {order.payment?.is_due && order.payment?.amount_due_now > 0
+                ? `Next: send ${formatMoney(order.payment.amount_due_now, settings)} using the details below, then tell us — we hold your goat as soon as it lands.`
+                : `We will call ${order.customer.phone} to confirm before delivery.`}
+            </span>
+          </div>
         </div>
       )}
 
@@ -141,7 +193,31 @@ export default function OrderDetailPage() {
           paid={order.refund?.amount || 0}
           refunded={order.refund?.sent || 0}
           formatAmount={(amount) => formatMoney(amount, settings)}
+          estimate={order.shipping?.estimate}
+          deliveredAt={order.delivered_at}
+          formatWhen={formatDateTime}
         />
+
+        {/* Nobody knows better than the buyer whether the goat is standing in
+            their yard, so let them say so instead of waiting on a phone call
+            being relayed to staff. */}
+        {order.can_confirm_receipt && (
+          <div className="mt-3 pt-3 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span className="small text-soft">
+              <i className="bi bi-house-check me-1" aria-hidden="true" />
+              Has it arrived? Let us know and we will close the order.
+            </span>
+
+            <button
+              type="button"
+              className="btn btn-brand btn-sm px-3"
+              onClick={() => setConfirmingReceipt(true)}
+              disabled={receipting}
+            >
+              {receipting ? 'Confirming…' : 'Yes, my goat arrived'}
+            </button>
+          </div>
+        )}
       </div>
 
       <OrderPayment order={order} onPaid={() => setReloads((count) => count + 1)} />
@@ -193,6 +269,13 @@ export default function OrderDetailPage() {
               {order.shipping.area && <>{order.shipping.area}<br /></>}
               {order.shipping.city} {order.shipping.postal_code}
             </address>
+            {order.shipping.zone && (
+              <p className="small text-soft mt-2 mb-0">
+                <i className="bi bi-geo-alt me-1" aria-hidden="true" />
+                {order.shipping.zone}
+              </p>
+            )}
+
             {order.shipping.notes && (
               <p className="small text-soft mt-2 mb-0"><em>{order.shipping.notes}</em></p>
             )}
@@ -205,9 +288,11 @@ export default function OrderDetailPage() {
             <dl className="row small mb-0">
               <dt className="col-7 fw-normal text-soft">Method</dt>
               <dd className="col-5 text-end">
-                {order.payment?.status === 'paid'
-                  ? <span className="text-success">Paid</span>
-                  : <span className="text-soft text-uppercase">{order.payment_method}</span>}
+                {order.payment?.status === 'refunded'
+                  ? <span className="text-soft">Refunded</span>
+                  : order.payment?.status === 'paid'
+                    ? <span className="text-success">Paid</span>
+                    : <span className="text-soft text-uppercase">{order.payment_method}</span>}
               </dd>
 
               <dt className="col-7 fw-normal text-soft">Subtotal</dt>
@@ -223,8 +308,14 @@ export default function OrderDetailPage() {
               <dt className="col-7 fw-normal text-soft">Delivery</dt>
               <dd className="col-5 text-end">{formatMoney(order.totals.delivery_charge, settings)}</dd>
 
-              <dt className="col-7 fw-semibold pt-2 border-top">Total</dt>
-              <dd className="col-5 text-end fw-bold text-brand pt-2 border-top">
+              {/* The breakdown stays on a cancelled order — it is the record of
+                  what was bought, and it is what makes the refund figure below
+                  legible. It just stops being the headline: the emphasis and
+                  the dividing line move down to what actually happened. */}
+              <dt className={`col-7 ${isCancelled ? 'fw-normal text-soft' : 'fw-semibold pt-2 border-top'}`}>
+                {isCancelled ? 'Order total' : 'Total'}
+              </dt>
+              <dd className={`col-5 text-end ${isCancelled ? 'text-soft' : 'fw-bold text-brand pt-2 border-top'}`}>
                 {formatMoney(order.totals.total, settings)}
               </dd>
 
@@ -237,14 +328,29 @@ export default function OrderDetailPage() {
                 </>
               )}
 
-              {order.status === 'cancelled' ? (
-                order.refund?.amount > 0 && (
+              {refundSent > 0 && (
+                <>
+                  <dt className="col-7 fw-semibold pt-2 border-top">Refunded to you</dt>
+                  <dd className="col-5 text-end fw-bold text-success pt-2 border-top">
+                    {formatMoney(refundSent, settings)}
+                  </dd>
+                </>
+              )}
+
+              {isCancelled ? (
+                order.refund?.amount > 0 ? (
                   <>
                     <dt className="col-7 fw-semibold">To be refunded</dt>
                     <dd className="col-5 text-end fw-semibold text-danger">
                       {formatMoney(order.refund.amount, settings)}
                     </dd>
                   </>
+                ) : (
+                  <dd className="col-12 text-soft mt-2 mb-0" style={{ fontSize: '.8rem' }}>
+                    {refundSent > 0
+                      ? 'Cancelled and settled — nothing is owed either way.'
+                      : 'Cancelled. Nothing was charged.'}
+                  </dd>
                 )
               ) : (
                 order.totals.balance_due > 0 && (

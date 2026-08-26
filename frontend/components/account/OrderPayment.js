@@ -13,6 +13,14 @@ const STATUS_STYLE = {
   rejected: 'text-bg-danger',
 };
 
+// Keyed by what the server says it is asking for, so the panel matches the plan
+// the buyer chose at checkout rather than guessing from an amount.
+const HEADINGS = {
+  advance: 'Pay your advance',
+  balance: 'Pay the balance',
+  full: 'Pay for this order',
+};
+
 /**
  * How a buyer actually pays.
  *
@@ -86,10 +94,17 @@ export default function OrderPayment({ order, onPaid }) {
           </span>
         </div>
 
+        {/* Never name a payment method here. The balance can be settled on any
+            rail the shop accepts once the order is on its way — telling a buyer
+            to have cash ready both presumes their choice and contradicts the
+            "pay for this order" panel they will be shown at dispatch. */}
         <p className="text-soft small mb-0">
           We have your {formatMoney(order.totals.paid, settings)}. Nothing more is needed now —
-          please have the remaining {formatMoney(payment.balance_due, settings)} ready in cash
-          when your goat is delivered.
+          the remaining {formatMoney(payment.balance_due, settings)} is due when your goat is
+          delivered
+          {methods.length > 0
+            ? ', and you can pay it here as soon as it is on its way, or settle it with the driver.'
+            : '.'}
         </p>
 
         {history.length > 0 && (
@@ -164,27 +179,44 @@ export default function OrderPayment({ order, onPaid }) {
     <div className="panel">
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-1">
         <h2 className="h6 mb-0">
-          {payment.awaiting_advance ? 'Pay your advance' : 'Pay for this order'}
+          {HEADINGS[payment.due_kind] || HEADINGS.full}
         </h2>
         <span className="fw-bold text-brand">
           {formatMoney(payment.amount_due_now, settings)} due now
         </span>
       </div>
 
+      {/* Driven by what the server says it is asking for, never inferred here.
+          This used to read `awaiting_advance`, which only means "the up-front
+          money has not arrived" — and a pay-in-full order sets its up-front
+          amount to the whole total, so it announced "Pay your advance … the
+          remaining Rs 0 is due when it arrives" on a full payment. */}
       <p className="text-soft small mb-4">
-        {payment.awaiting_advance ? (
+        {payment.due_kind === 'advance' && (
           <>
             You chose to pay an advance of{' '}
             {formatMoney(payment.advance_required, settings)} to reserve your goat — the
             remaining {formatMoney(payment.balance_due - payment.amount_due_now, settings)}{' '}
-            is due when it arrives.
-          </>
-        ) : (
-          <>
-            Send the money using any of the accounts below, then tell us about it. We check
-            every payment by hand before the goat goes out.
+            is due when it arrives.{' '}
           </>
         )}
+
+        {payment.due_kind === 'balance' && (
+          <>
+            You have paid {formatMoney(order.totals.paid, settings)} so far. This settles the
+            order in full.{' '}
+          </>
+        )}
+
+        {payment.due_kind === 'full' && (
+          <>
+            You chose to pay in full up front, so this covers the whole order — nothing is
+            left to pay on delivery.{' '}
+          </>
+        )}
+
+        Send the money using any of the accounts below, then tell us about it. We check every
+        payment by hand before the goat goes out.
       </p>
 
       <div className="row g-2 mb-4">

@@ -78,6 +78,15 @@ class CheckoutController extends Controller
             'order_notes'      => ['nullable', 'string', 'max:1000'],
             'delivery_zone_id' => ['required', 'exists:delivery_zones,id'],
             'payment_method'   => ['required', 'string', 'exists:payment_methods,code'],
+
+            // Absent means the whole cart, which is the normal path. Present
+            // means "buy just these", as the goat page's Buy now does.
+            'goat_ids'         => ['nullable', 'array', 'min:1'],
+            'goat_ids.*'       => ['integer'],
+            // Preferred over goat_ids: one listing sold by the kilo can be on
+            // several cart lines at once, and "buy now" means the one on screen.
+            'cart_item_ids'    => ['nullable', 'array', 'min:1'],
+            'cart_item_ids.*'  => ['integer'],
             // Optional: left out, the method's own default applies, which for
             // cash on delivery is exactly what it always was.
             'payment_plan'     => ['nullable', 'string', Rule::in(array_keys(Order::PAYMENT_PLANS))],

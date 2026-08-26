@@ -10,12 +10,24 @@ import { formatMoney } from '@/lib/format';
  * Shared between the cart and checkout pages. `deliveryCharge` is passed in
  * on checkout once the customer picks a zone; on the cart page it is unknown.
  */
-export default function CartSummary({ showCheckoutButton = false, deliveryCharge = null, children }) {
+export default function CartSummary({
+  showCheckoutButton = false,
+  deliveryCharge = null,
+  // Buying a single goat rather than the cart: the figures come from that one
+  // item, and a whole-basket coupon has nothing to attach itself to.
+  totals: totalsOverride = null,
+  showCoupon = true,
+  // What is being bought. Rendered above the figures, because a summary reads
+  // "here is what you are getting, here is what it costs" — a line item
+  // stranded under the total looks like an afterthought, or worse, an extra.
+  items = null,
+  children,
+}) {
   const { cart, loading, applyCoupon, removeCoupon } = useCart();
   const settings = useSettings();
   const [code, setCode] = useState('');
 
-  const totals = cart?.totals || {};
+  const totals = totalsOverride || cart?.totals || {};
   const grandTotal = deliveryCharge === null
     ? totals.total
     : Number(totals.total || 0) + Number(deliveryCharge || 0);
@@ -36,7 +48,29 @@ export default function CartSummary({ showCheckoutButton = false, deliveryCharge
     <div className="panel">
       <h2 className="h6 mb-3">Order summary</h2>
 
-      {settings.enable_coupons !== false && (
+      {items?.length > 0 && (
+        <>
+          <ul className="list-unstyled small mb-0">
+            {items.map((item) => (
+              <li className="d-flex justify-content-between gap-3 py-1" key={item.id}>
+                <span className="text-ink">
+                  {item.goat?.name || item.name}
+                  {item.quantity > 1 && (
+                    <span className="text-soft"> &times; {item.quantity}</span>
+                  )}
+                </span>
+                <span className="text-nowrap flex-shrink-0">
+                  {formatMoney(item.line_total, settings)}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <hr className="my-3" />
+        </>
+      )}
+
+      {showCoupon && settings.enable_coupons !== false && (
         <div className="mb-3">
           {cart?.coupon ? (
             <div className="d-flex justify-content-between align-items-center bg-surface rounded p-2 small">

@@ -548,4 +548,81 @@ class OrderRefundTest extends TestCase
         $this->assertFalse($payment['awaiting_check']);
         $this->assertFalse($payment['can_pay_now']);
     }
+
+    /**
+     * A wallet refund lands instantly. Telling that buyer to wait "a day or
+     * two" for money already in their hand is how you earn a support call.
+     */
+    public function test_the_arrival_time_follows_the_rail_not_a_guess(): void
+    {
+        PaymentMethod::where('code', 'bank_transfer')
+            ->update(['is_active' => true, 'supports_payout' => true, 'requires_bank_name' => true]);
+
+        $order = $this->cancelledPaidOrder();
+
+        $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/refunds', [
+            'method' => 'esewa',
+            'refund_to_name' => 'Rahim Uddin',
+            'refund_to_account' => '9801234567',
+        ])->assertCreated()->json('data.reference');
+
+        $refund = $this->getJson('/api/v1/orders/'.$order->order_number)
+            ->assertOk()->json('data.refund');
+
+        $this->assertSame('straight away', $refund['eta']);
+        $this->assertSame('eSewa', $refund['method_label']);
+
+        // The same order refunded by bank instead sets a slower expectation.
+        $payment = Payment::where('reference', $reference)->firstOrFail();
+        $payment->update(['method' => 'bank_transfer']);
+
+        $refund = $this->getJson('/api/v1/orders/'.$order->order_number)
+            ->assertOk()->json('data.refund');
+
+        $this->assertSame('in 1-3 working days', $refund['eta']);
+        $this->assertSame('Bank Transfer', $refund['method_label']);
+    }
+
+    /** With nothing on file we promise nothing rather than inventing a wait. */
+    public function test_a_rail_with_no_stated_time_promises_nothing(): void
+    {
+        PaymentMethod::where('code', 'esewa')->update(['refund_eta' => null]);
+
+        $order = $this->cancelledPaidOrder();
+
+        $this->postJson('/api/v1/orders/'.$order->order_number.'/refunds', [
+            'method' => 'esewa',
+            'refund_to_name' => 'Rahim Uddin',
+            'refund_to_account' => '9801234567',
+        ])->assertCreated();
+
+        $refund = $this->getJson('/api/v1/orders/'.$order->order_number)
+            ->assertOk()->json('data.refund');
+
+        $this->assertNull($refund['eta']);
+    }
+
+    /** Once sent, the reference is what lets a buyer chase it. */
+    public function test_a_sent_refund_carries_its_reference(): void
+    {
+        $order = $this->cancelledPaidOrder();
+
+        $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/refunds', [
+            'method' => 'esewa',
+            'refund_to_name' => 'Rahim Uddin',
+            'refund_to_account' => '9801234567',
+        ])->assertCreated()->json('data.reference');
+
+        $refund = Payment::where('reference', $reference)->firstOrFail();
+        $refund->update(['transaction_reference' => 'ESW-RF-4471']);
+
+        app(PaymentService::class)->confirm($refund->fresh(), User::where('role', 'admin')->firstOrFail());
+
+        $block = $this->getJson('/api/v1/orders/'.$order->order_number)
+            ->assertOk()->json('data.refund');
+
+        $this->assertSame('ESW-RF-4471', $block['reference']);
+        $this->assertNotNull($block['sent_at']);
+        $this->assertSame('straight away', $block['eta']);
+    }
 }

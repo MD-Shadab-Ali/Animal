@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Services\PaymentService;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\Summarizers\Sum;
@@ -17,6 +18,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\HtmlString;
 
 class PaymentsTable
 {
@@ -75,6 +77,17 @@ class PaymentsTable
                     ->searchable()
                     ->toggleable(),
 
+
+                // Whether there is anything to look at, and a way straight to it.
+                TextColumn::make('proof')
+                    ->label('Receipt')
+                    ->badge()
+                    ->state(fn (Payment $record) => $record->hasProof() ? 'View' : 'None')
+                    ->color(fn (Payment $record) => $record->hasProof() ? 'success' : 'gray')
+                    ->icon(fn (Payment $record) => $record->hasProof() ? 'heroicon-o-paper-clip' : null)
+                    ->url(fn (Payment $record) => $record->proof_url)
+                    ->openUrlInNewTab(),
+
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (?string $state) => Payment::STATUSES[$state] ?? $state)
@@ -109,6 +122,20 @@ class PaymentsTable
                     ->visible(fn (Payment $record) => $record->status === 'pending')
                     ->requiresConfirmation()
                     ->modalDescription('Only confirm once you can see the money on the account. The order updates itself.')
+                    ->schema([
+                        // The evidence, right where the decision is made.
+                        Placeholder::make('receipt')
+                            ->hiddenLabel()
+                            ->content(fn (Payment $record) => $record->hasProof()
+                                ? new HtmlString($record->proofIsImage()
+                                    ? '<a href="'.e($record->proof_url).'" target="_blank" rel="noopener">'
+                                        .'<img src="'.e($record->proof_url).'" alt="Payment receipt" '
+                                        .'style="max-width:100%;border-radius:.5rem;'
+                                        .'border:1px solid rgba(0,0,0,.1)" /></a>'
+                                    : '<a href="'.e($record->proof_url).'" target="_blank" rel="noopener">'
+                                        .'Open the attached file</a>')
+                                : 'No receipt was attached — check the account before confirming.'),
+                    ])
                     ->action(function (Payment $record): void {
                         app(PaymentService::class)->confirm($record, auth()->user());
 

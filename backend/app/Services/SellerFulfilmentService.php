@@ -69,12 +69,7 @@ class SellerFulfilmentService
         ]);
 
         // Keep the seller's own line in step so the two never disagree.
-        $lineStatus = match ($status) {
-            'confirmed', 'processing' => 'preparing',
-            'out_for_delivery'        => 'handed_over',
-            'delivered'               => 'handed_over',
-            default                   => null,
-        };
+        $lineStatus = Order::lineStatusFor($status);
 
         if ($lineStatus) {
             $order->items()

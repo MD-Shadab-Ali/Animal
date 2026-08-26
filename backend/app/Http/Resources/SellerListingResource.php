@@ -8,6 +8,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** A goat as its owner sees it, with the approval state attached. */
 class SellerListingResource extends JsonResource
 {
+    public const STATE_LABELS = [
+        'draft'    => 'Draft',
+        'pending'  => 'Awaiting review',
+        'rejected' => 'Changes needed',
+        'live'     => 'Live',
+        'hidden'   => 'Not published',
+        'sold'     => 'Sold',
+        'archived' => 'Archived',
+    ];
+
     public function toArray(Request $request): array
     {
         return [
@@ -41,6 +51,17 @@ class SellerListingResource extends JsonResource
             'approval_status'  => $this->approval_status,
             'rejection_reason' => $this->rejection_reason,
             'is_live'          => $this->status === 'published' && $this->approval_status === 'approved',
+
+            /*
+             * Where this listing actually stands, as one value.
+             *
+             * It takes two columns to know: a sold goat keeps
+             * `approval_status = approved`, so anything reading approval alone
+             * calls it "Live" long after it has gone. Deciding it here means no
+             * screen can get that pairing wrong.
+             */
+            'state'            => $this->listingState(),
+            'state_label'      => self::STATE_LABELS[$this->listingState()] ?? 'Unknown',
             'is_editable'      => in_array($this->approval_status, ['draft', 'rejected'], true),
 
             'views'        => $this->views,
@@ -50,5 +71,20 @@ class SellerListingResource extends JsonResource
 
             'images' => GoatImageResource::collection($this->whenLoaded('images')),
         ];
+    }
+
+    /** Sold and archived outrank approval: neither can be bought. */
+    private function listingState(): string
+    {
+        return match (true) {
+            $this->status === 'sold'          => 'sold',
+            $this->status === 'archived'      => 'archived',
+            $this->approval_status === 'draft'    => 'draft',
+            $this->approval_status === 'pending'  => 'pending',
+            $this->approval_status === 'rejected' => 'rejected',
+            $this->status === 'published'     => 'live',
+            // Approved, but the seller has taken it down.
+            default                           => 'hidden',
+        };
     }
 }

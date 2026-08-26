@@ -402,4 +402,52 @@ class CheckoutPaymentPlanTest extends TestCase
         $this->assertTrue($payment['is_paid']);
         $this->assertFalse($payment['can_pay_now']);
     }
+
+    /**
+     * The panel has to say what was actually chosen.
+     *
+     * A pay-in-full order sets its up-front amount to the whole total, so
+     * `awaiting_advance` is true for it as well — reading that flag as "this is
+     * an advance" put "Pay your advance ... the remaining Rs 0 is due when it
+     * arrives" on a full payment. `due_kind` says it outright instead.
+     */
+    public function test_a_full_payment_is_never_described_as_an_advance(): void
+    {
+        $number = $this->checkout('esewa', 'full')->assertCreated()->json('data.order_number');
+
+        $payment = $this->getJson('/api/v1/orders/'.$number)->assertOk()->json('data.payment');
+
+        $this->assertSame('full', $payment['plan']);
+        $this->assertSame('full', $payment['due_kind']);
+        // The misleading flag is still true here, which is exactly why the
+        // storefront must not be the thing deciding.
+        $this->assertTrue($payment['awaiting_advance']);
+    }
+
+    public function test_an_advance_order_says_it_is_an_advance(): void
+    {
+        $number = $this->checkout('esewa', 'advance')->assertCreated()->json('data.order_number');
+
+        $payment = $this->getJson('/api/v1/orders/'.$number)->assertOk()->json('data.payment');
+
+        $this->assertSame('advance', $payment['due_kind']);
+    }
+
+    /** Part paid, and now being asked for what is left. */
+    public function test_the_remainder_is_described_as_a_balance(): void
+    {
+        $number = $this->checkout('esewa', 'full')->assertCreated()->json('data.order_number');
+        $order = Order::where('order_number', $number)->firstOrFail();
+
+        app(PaymentService::class)->record($order, [
+            'amount' => round((float) $order->total / 2, 2),
+            'method' => 'esewa',
+        ]);
+
+        $payment = $this->getJson('/api/v1/orders/'.$number)->assertOk()->json('data.payment');
+
+        $this->assertSame('balance', $payment['due_kind']);
+        $this->assertSame('partially_paid', $order->fresh()->payment_status);
+    }
+
 }

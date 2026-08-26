@@ -92,6 +92,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('orders/{orderNumber}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('orders/{orderNumber}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+        Route::post('orders/{orderNumber}/received', [OrderController::class, 'confirmReceipt'])
+            ->name('orders.received');
         Route::post('orders/{orderNumber}/payments', [OrderController::class, 'pay'])
             ->middleware('throttle:public-forms')
             ->name('orders.pay');
@@ -143,6 +145,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::put('seller/listings/{goat}', [SellerListingController::class, 'update'])->name('seller.listings.update');
             Route::delete('seller/listings/{goat}', [SellerListingController::class, 'destroy'])->name('seller.listings.destroy');
             Route::post('seller/listings/{goat}/submit', [SellerListingController::class, 'submit'])->name('seller.listings.submit');
+            Route::post('seller/listings/{goat}/images', [SellerListingController::class, 'uploadImages'])
+                ->name('seller.listings.images.store');
+            Route::delete('seller/listings/{goat}/images/{image}', [SellerListingController::class, 'deleteImage'])
+                ->name('seller.listings.images.destroy');
 
             Route::get('seller/orders', [SellerSalesController::class, 'orders'])->name('seller.orders');
             Route::put('seller/order-items/{item}/status', [SellerSalesController::class, 'updateItemStatus'])

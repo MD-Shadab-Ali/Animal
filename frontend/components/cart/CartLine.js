@@ -24,7 +24,11 @@ export default function CartLine({ item, isFirst, settings }) {
 
         <div className="small text-soft mb-2">
           {item.goat.breed}
-          {item.goat.weight_kg ? ` · ${item.goat.weight_kg} kg` : ''}
+          {/* The weight on the line is the one the buyer picked; the one on the
+              listing is only a starting point once it is sold by the kilo. */}
+          {item.weight_kg
+            ? ` · ${item.weight_kg} kg`
+            : (item.goat.weight_kg ? ` · ${item.goat.weight_kg} kg` : '')}
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-3">

@@ -20,6 +20,8 @@ class OrderResource extends JsonResource
             'payment_plan'   => $this->payment_plan,
             'payment_status' => $this->payment_status,
             'is_cancellable' => $this->isCancellable(),
+            // The buyer can close this themselves by saying it arrived.
+            'can_confirm_receipt' => $this->canConfirmReceipt(),
 
             'customer' => [
                 'name'  => $this->customer_name,
@@ -33,6 +35,8 @@ class OrderResource extends JsonResource
                 'city'         => $this->city,
                 'postal_code'  => $this->postal_code,
                 'zone'         => $this->whenLoaded('deliveryZone', fn () => $this->deliveryZone?->name),
+                // What the buyer was promised when they chose the zone.
+                'estimate'     => $this->delivery_estimate,
                 'notes'        => $this->order_notes,
             ],
 
@@ -52,7 +56,10 @@ class OrderResource extends JsonResource
             'payment' => $this->paymentBlock(),
             'refund'  => $this->refundBlock(),
 
-            'items'      => OrderItemResource::collection($this->whenLoaded('items')),
+            // Each line is told which order it belongs to, so a delivered
+            // order stops saying the goat is still with the courier.
+            'items'      => $this->whenLoaded('items', fn () => $this->items
+                ->map(fn ($item) => (new OrderItemResource($item))->forOrder($this->status))),
             'history'    => OrderStatusHistoryResource::collection($this->whenLoaded('statusHistories')),
             'placed_at'  => $this->created_at?->toIso8601String(),
             'delivered_at' => $this->delivered_at?->toIso8601String(),
@@ -124,6 +131,22 @@ class OrderResource extends JsonResource
                 ? (float) $this->advance_required
                 : null,
             'awaiting_advance' => $this->awaiting_advance,
+
+            /*
+             * What the shop is actually asking for right now, said plainly so
+             * the storefront never has to work it out.
+             *
+             * `awaiting_advance` cannot answer this: it means "the up-front
+             * money has not arrived", and a pay-in-full order sets its
+             * up-front amount to the whole total — so the flag is true there
+             * too. Reading it as "this is an advance" put "Pay your advance,
+             * the remaining Rs 0 is due on arrival" on a full payment.
+             */
+            'due_kind' => match (true) {
+                $this->payment_plan === 'advance' && $this->awaiting_advance => 'advance',
+                (float) $this->paid_amount > 0                               => 'balance',
+                default                                                      => 'full',
+            },
             'is_paid'      => $this->isFullyPaid(),
 
             // Owed now, but there may still be nowhere to send it.
@@ -184,6 +207,14 @@ class OrderResource extends JsonResource
             'requested_at' => $open?->created_at?->toIso8601String(),
             'sent'        => round((float) $sent->sum('amount'), 2),
             'destination' => $open?->refund_destination ?? $sent->last()?->refund_destination,
+
+            // How long this rail actually takes, and the reference to quote if
+            // it has not turned up. Null means nobody has said, so the
+            // storefront promises nothing rather than inventing a duration.
+            'eta'         => ($open ?? $sent->last())?->arrival_eta,
+            'method_label' => ($open ?? $sent->last())?->method_label,
+            'reference'   => $sent->last()?->transaction_reference,
+            'sent_at'     => $sent->last()?->confirmed_at?->toIso8601String(),
         ];
     }
 }

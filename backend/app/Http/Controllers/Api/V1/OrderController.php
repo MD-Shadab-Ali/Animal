@@ -116,6 +116,45 @@ class OrderController extends Controller
         ], 201);
     }
 
+    /**
+     * The buyer telling us the goat arrived.
+     *
+     * They are the one person with first-hand knowledge, so this is the most
+     * reliable signal there is — better than a rider's phone call relayed to
+     * staff. It closes the order, which releases the seller's earnings, so it
+     * is recorded against them in the order history.
+     */
+    public function confirmReceipt(Request $request, string $orderNumber): JsonResponse
+    {
+        $order = Order::where('user_id', $request->user()->id)
+            ->where('order_number', $orderNumber)
+            ->firstOrFail();
+
+        if ($order->status === 'delivered') {
+            return response()->json([
+                'message' => 'Thanks — this order is already marked as delivered.',
+                'data'    => new OrderResource($order->load('items')),
+            ]);
+        }
+
+        if (! $order->canConfirmReceipt()) {
+            return response()->json([
+                'message' => $order->isFullyPaid()
+                    ? 'This order is not out for delivery yet.'
+                    : 'There is still a balance to pay on this order. '
+                        .'Settle it with the driver and it will close itself.',
+            ], 422);
+        }
+
+        $order->statusNote = 'Confirmed received by the customer.';
+        $order->update(['status' => 'delivered']);
+
+        return response()->json([
+            'message' => 'Thank you — enjoy your goat!',
+            'data'    => new OrderResource($order->fresh()->load('items')),
+        ]);
+    }
+
     public function cancel(Request $request, string $orderNumber): JsonResponse
     {
         $order = Order::where('user_id', $request->user()->id)

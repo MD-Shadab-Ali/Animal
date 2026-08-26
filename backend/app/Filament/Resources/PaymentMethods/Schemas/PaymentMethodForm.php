@@ -40,6 +40,11 @@ class PaymentMethodForm
                     ->label('Available for seller payouts')
                     ->helperText('Sellers can pick this as the rail we send their earnings on. Needs to be active too.')
                     ->live(),
+                TextInput::make('refund_eta')
+                    ->label('Money sent on this arrives')
+                    ->placeholder('straight away')
+                    ->helperText('Completes "Refunds by this method usually arrive ___". A wallet is instant; a bank transfer is not. Leave empty to promise nothing.')
+                    ->visible(fn ($get) => (bool) $get('supports_payout')),
                 Toggle::make('requires_bank_name')
                     ->label('Ask the seller for their bank name')
                     ->helperText('Turn on for bank transfers — an account number alone is not enough to send to.')

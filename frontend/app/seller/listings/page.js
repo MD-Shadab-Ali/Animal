@@ -11,11 +11,14 @@ import { apiFetch } from '@/lib/api';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { formatMoney } from '@/lib/format';
 
+// Listing states, not approval statuses — "Live" and "Sold" are both approved,
+// and a seller needs to tell them apart more than anything else on this screen.
 const FILTERS = [
   ['', 'All'],
   ['draft', 'Drafts'],
   ['pending', 'Awaiting review'],
-  ['approved', 'Live'],
+  ['live', 'Live'],
+  ['sold', 'Sold'],
   ['rejected', 'Changes needed'],
 ];
 
@@ -25,14 +28,17 @@ function ListingsInner() {
   const searchParams = useSearchParams();
 
   const [listings, setListings] = useState(null);
-  const [filter, setFilter] = useState(searchParams.get('approval_status') || '');
+  // `?approval_status=` is still honoured so older links keep working.
+  const [filter, setFilter] = useState(
+    searchParams.get('state') || searchParams.get('approval_status') || ''
+  );
   const [busy, setBusy] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
   const load = useCallback(async (status) => {
     if (!token) return;
 
-    const query = status ? `?approval_status=${status}` : '';
+    const query = status ? `?state=${status}` : '';
 
     try {
       const response = await apiFetch(`/seller/listings${query}`, { token });
@@ -48,7 +54,7 @@ function ListingsInner() {
     async function fetchListings() {
       if (!token) return;
 
-      const query = filter ? `?approval_status=${filter}` : '';
+      const query = filter ? `?state=${filter}` : '';
 
       try {
         const response = await apiFetch(`/seller/listings${query}`, { token });
@@ -150,7 +156,7 @@ function ListingsInner() {
               <div className="flex-grow-1" style={{ minWidth: 200 }}>
                 <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
                   <strong className="text-ink">{listing.name}</strong>
-                  <ListingStatusPill status={listing.approval_status} />
+                  <ListingStatusPill status={listing.state} />
                 </div>
 
                 <div className="small text-soft mb-2">

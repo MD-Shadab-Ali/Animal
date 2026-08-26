@@ -23,8 +23,9 @@ class CartController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'goat_id'  => ['required', 'exists:goats,id'],
-            'quantity' => ['nullable', 'integer', 'min:1'],
+            'goat_id'   => ['required', 'exists:goats,id'],
+            'quantity'  => ['nullable', 'integer', 'min:1'],
+            'weight_kg' => ['nullable', 'numeric', 'min:0.01'],
         ]);
 
         $goat = Goat::findOrFail($data['goat_id']);
@@ -35,17 +36,39 @@ class CartController extends Controller
             ]);
         }
 
+        // Listings sold by the kilo need to know which weight is being bought:
+        // it decides the price, and two weights are two separate cart lines.
+        $weight = 0.0;
+
+        if ($goat->is_weight_priced) {
+            $weight = (float) ($data['weight_kg'] ?? $goat->lightest_weight);
+
+            if (! $goat->isWeightAllowed($weight)) {
+                throw ValidationException::withMessages([
+                    'weight_kg' => [$this->weightMessage($goat)],
+                ]);
+            }
+        }
+
         $cart     = $this->cartFor($request);
         $quantity = $data['quantity'] ?? 1;
 
         $item = CartItem::firstOrNew([
-            'cart_id' => $cart->id,
-            'goat_id' => $goat->id,
+            'cart_id'   => $cart->id,
+            'goat_id'   => $goat->id,
+            'weight_kg' => $weight,
         ]);
 
         $requested = ($item->quantity ?? 0) + $quantity;
 
-        if ($goat->track_stock && $requested > $goat->stock) {
+        // Stock counts animals, not weights, so every line for this listing
+        // draws on the same pool -- 25 kg and 37 kg are two of the five.
+        $otherLines = CartItem::where('cart_id', $cart->id)
+            ->where('goat_id', $goat->id)
+            ->when($item->exists, fn ($query) => $query->whereKeyNot($item->getKey()))
+            ->sum('quantity');
+
+        if ($goat->track_stock && $requested + $otherLines > $goat->stock) {
             throw ValidationException::withMessages([
                 'quantity' => ["Only {$goat->stock} of this goat is available."],
             ]);
@@ -70,7 +93,12 @@ class CartController extends Controller
 
         $goat = $item->goat;
 
-        if ($goat->track_stock && $data['quantity'] > $goat->stock) {
+        $otherLines = CartItem::where('cart_id', $item->cart_id)
+            ->where('goat_id', $item->goat_id)
+            ->whereKeyNot($item->getKey())
+            ->sum('quantity');
+
+        if ($goat->track_stock && $data['quantity'] + $otherLines > $goat->stock) {
             throw ValidationException::withMessages([
                 'quantity' => ["Only {$goat->stock} of this goat is available."],
             ]);
@@ -141,6 +169,15 @@ class CartController extends Controller
             'message' => 'Coupon removed.',
             'data'    => new CartResource($this->cartFor($request)),
         ]);
+    }
+
+    /** Says what the seller will actually supply, in the buyer's own terms. */
+    private function weightMessage(Goat $goat): string
+    {
+        $step = rtrim(rtrim(number_format((float) ($goat->weight_step_kg ?: 1), 2, '.', ''), '0'), '.');
+
+        return 'Choose a weight between '.(float) $goat->lightest_weight.' kg and '
+            .(float) $goat->heaviest_weight.' kg, in steps of '.$step.' kg.';
     }
 
     private function cartFor(Request $request): Cart

@@ -196,15 +196,15 @@ class OrderOwnershipTest extends TestCase
         $goat = $this->sellerGoat();
         $order = $this->orderFor([$goat->id]);
 
-        // The escape hatch for disputes stays open even though staff cannot
-        // move the order forward.
+        // The escape hatch for disputes stays open alongside the status
+        // control staff and the seller now share.
         $order->update(['status' => 'cancelled']);
 
         $this->assertSame('cancelled', $order->fresh()->status);
         $this->assertSame('published', $goat->fresh()->status);
     }
 
-    public function test_the_admin_status_action_is_hidden_on_a_seller_run_order(): void
+    public function test_the_admin_status_action_is_available_on_every_order(): void
     {
         $sellerOrder = $this->orderFor([$this->sellerGoat('Seller Only Goat')->id]);
 
@@ -216,21 +216,22 @@ class OrderOwnershipTest extends TestCase
         Livewire::test(ListOrders::class)
             // Staff run house-stock orders, so the control is there.
             ->assertTableActionVisible('updateStatus', $staffOrder)
-            // The seller runs theirs, so staff must not be able to move it.
-            ->assertTableActionHidden('updateStatus', $sellerOrder)
-            // But the dispute escape hatch stays open on both.
+            // And they can step in on a seller's order too: the seller is the
+            // one who normally moves it, but staff are no longer locked out.
+            ->assertTableActionVisible('updateStatus', $sellerOrder)
+            // The dispute escape hatch stays open on both.
             ->assertTableActionVisible('cancelOrder', $sellerOrder)
             ->assertTableActionVisible('cancelOrder', $staffOrder);
     }
 
-    public function test_the_admin_status_field_is_disabled_on_a_seller_run_order(): void
+    public function test_the_admin_status_field_stays_editable_on_a_seller_run_order(): void
     {
-        $order = $this->orderFor([$this->sellerGoat('Locked Goat')->id]);
+        $order = $this->orderFor([$this->sellerGoat('Shared Goat')->id]);
 
         $this->actingAs(User::where('role', 'admin')->firstOrFail());
 
         Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
-            ->assertFormFieldDisabled('status');
+            ->assertFormFieldEnabled('status');
     }
 
     public function test_the_admin_status_field_stays_editable_on_a_house_order(): void

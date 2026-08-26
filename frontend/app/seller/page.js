@@ -123,7 +123,7 @@ export default function SellerDashboard() {
         <div className="alert alert-warning mb-0">
           <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true" />
           {listings.rejected} listing{listings.rejected === 1 ? '' : 's'} came back with changes requested.{' '}
-          <Link href="/seller/listings?approval_status=rejected" className="fw-semibold">Fix them</Link>
+          <Link href="/seller/listings?state=rejected" className="fw-semibold">Fix them</Link>
         </div>
       )}
     </div>

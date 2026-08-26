@@ -11,7 +11,7 @@ import SellerApplicationForm from '@/components/seller/SellerApplicationForm';
 const STEPS = [
   ['bi-person-plus', 'Apply once', 'Tell us who you are and where your farm is. We verify every seller before they can list.'],
   ['bi-clipboard-check', 'List your goats', 'Add breed, weight, age and photos. Our team checks each listing before it goes live.'],
-  ['bi-truck', 'We handle delivery', 'Buyers pay cash on delivery. We arrange transport and collect the money.'],
+  ['bi-truck', 'We handle delivery', 'Buyers pay up front or on delivery. We arrange transport and collect the money.'],
   ['bi-cash-coin', 'Get paid', 'Once an order is delivered your earnings are settled and paid out.'],
 ];
 

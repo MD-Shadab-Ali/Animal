@@ -5,8 +5,12 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, toFormData } from '@/lib/api';
 import ListingField from './ListingField';
+
+// Enough to show an animal from every angle without a wall of photos. Matches
+// the cap the API enforces.
+const MAX_IMAGES = 8;
 
 const BLANK = {
   category_id: '',
@@ -21,6 +25,9 @@ const BLANK = {
   is_vaccinated: false,
   price: '',
   sale_price: '',
+  min_weight_kg: '',
+  max_weight_kg: '',
+  weight_step_kg: 1,
   stock: 1,
   short_description: '',
   description: '',
@@ -43,6 +50,10 @@ export default function ListingForm({ listing = null }) {
     : BLANK));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+
+  // Photos already on the listing, and ones picked but not yet uploaded.
+  const [images, setImages] = useState(listing?.images || []);
+  const [files, setFiles] = useState([]);
 
   useEffect(() => {
     apiFetch('/categories')
@@ -70,17 +81,65 @@ export default function ListingForm({ listing = null }) {
         ? await apiFetch(`/seller/listings/${listing.id}`, { method: 'PUT', token, body: payload })
         : await apiFetch('/seller/listings', { method: 'POST', token, body: payload });
 
+      // Photos need a listing to hang off, so on a brand new one they follow
+      // the save rather than going up with it.
+      if (files.length) {
+        const id = listing?.id ?? response.data?.id;
+
+        await apiFetch(`/seller/listings/${id}/images`, {
+          method: 'POST',
+          token,
+          body: toFormData({ images: files }),
+        });
+      }
+
       toast.success(response.message);
       router.push('/seller/listings');
     } catch (error) {
       setErrors(error.errors || {});
-      toast.error(error.message || 'Please check the form.');
+      toast.error(error.errors?.images?.[0] || error.message || 'Please check the form.');
     } finally {
       setSaving(false);
     }
   };
 
+  const removeImage = async (image) => {
+    try {
+      const response = await apiFetch(`/seller/listings/${listing.id}/images/${image.id}`, {
+        method: 'DELETE',
+        token,
+      });
+
+      setImages(response.data.images || []);
+      toast.success(response.message);
+    } catch (error) {
+      toast.error(error.message || 'Could not remove that photo.');
+    }
+  };
+
   const shared = { form, errors, onChange: set };
+
+  // The rate the buyer will be charged at, worked out the same way the server
+  // works it out — from the asking price against the advertised weight.
+  const rate = (() => {
+    const weight = Number(form.weight_kg);
+    const asking = Number(form.price);
+    const sale = Number(form.sale_price);
+    const base = sale > 0 && sale < asking ? sale : asking;
+
+    if (!(weight > 0) || !(base > 0)) return null;
+
+    const topWeight = Number(form.max_weight_kg);
+    const money = (value) => value.toFixed(2);
+
+    return {
+      perKg: money(base / weight),
+      price: money(base),
+      weight,
+      topWeight,
+      top: topWeight > weight ? money(base * topWeight / weight) : null,
+    };
+  })();
 
   return (
     <form onSubmit={save} className="d-grid gap-4">
@@ -120,23 +179,106 @@ export default function ListingForm({ listing = null }) {
         <h2 className="h6 mb-3">Price</h2>
         <div className="row g-3">
           <ListingField {...shared} name="price" type="number" required
-            label={`Asking price (${settings.currency_symbol || ''})`} />
+            label={`Asking price (${settings.currency_symbol || ''})`}
+            hint="For the weight you entered above. Heavier animals are priced up from here." />
           <ListingField {...shared} name="sale_price" label="Discounted price" type="number"
             hint="Optional, and must be lower than the asking price." />
+
+          <ListingField {...shared} name="min_weight_kg" label="Lightest you can supply (kg)"
+            type="number"
+            hint="Leave blank to start at the weight you listed above." />
+          <ListingField {...shared} name="max_weight_kg" label="Heaviest you can supply (kg)"
+            type="number"
+            hint="Leave blank to sell this one animal at its own weight." />
+          <ListingField {...shared} name="weight_step_kg" label="Steps of (kg)" type="number"
+            hint="What the weight selector moves in — 1 kg is usual." />
+
+          {/* Shown, never entered: a price against a weight is already a rate,
+              and a third box would only be a third thing that can disagree. */}
+          {rate && (
+            <div className="col-12">
+              <div className="alert alert-light border mb-0 py-2 small">
+                <i className="bi bi-calculator me-1" aria-hidden="true" />
+                <strong>{settings.currency_symbol || ''}{rate.perKg} / kg</strong>
+                {' '}— worked out from {settings.currency_symbol || ''}{rate.price} at {rate.weight} kg.
+                {rate.top && (
+                  <> A buyer asking for {rate.topWeight} kg pays{' '}
+                    <strong>{settings.currency_symbol || ''}{rate.top}</strong>.
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           <ListingField {...shared} name="stock" label="How many available" type="number"
-            hint="Usually 1 — each goat is unique." />
+            hint={Number(form.max_weight_kg) > Number(form.weight_kg)
+              || (form.min_weight_kg && Number(form.min_weight_kg) < Number(form.weight_kg))
+              ? 'How many animals you can supply from this listing.'
+              : 'Usually 1 — each goat is unique.'} />
         </div>
+      </section>
+
+      <section className="panel">
+        <h2 className="h6 mb-1">Photos</h2>
+        <p className="text-soft small mb-3">
+          The first photo is the one buyers see in the shop. Up to {MAX_IMAGES}, 5MB each.
+        </p>
+
+        {images.length > 0 && (
+          <div className="row row-cols-3 row-cols-md-4 g-2 mb-3">
+            {images.map((image, index) => (
+              <div className="col" key={image.id}>
+                <div className="gallery__thumb position-relative" style={{ aspectRatio: '1' }}>
+                  <img src={image.url} alt={image.alt || form.name} />
+
+                  {index === 0 && (
+                    <span className="badge text-bg-dark position-absolute top-0 start-0 m-1">
+                      Main
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 py-0 px-1"
+                    aria-label={`Remove photo ${index + 1}`}
+                    onClick={() => removeImage(image)}
+                  >
+                    <i className="bi bi-x-lg" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <input
+          type="file"
+          className={`form-control ${errors.images ? 'is-invalid' : ''}`}
+          accept=".jpg,.jpeg,.png,.webp"
+          multiple
+          onChange={(event) => setFiles(Array.from(event.target.files || []))}
+        />
+
+        {errors.images && <div className="invalid-feedback d-block">{errors.images[0]}</div>}
+
+        {files.length > 0 && (
+          <p className="form-text mb-0">
+            {files.length} {files.length === 1 ? 'photo' : 'photos'} will be uploaded when you save.
+          </p>
+        )}
       </section>
 
       <section className="panel">
         <h2 className="h6 mb-3">Description</h2>
         <div className="row g-3">
+          {/* Two fields, two jobs: the summary is the lead line under the title
+              on the goat page, the full description is the body below it. */}
           <ListingField {...shared} name="short_description" label="One-line summary" as="textarea" rows={2}
-            colClass="col-12" hint="Shown on the card in the shop." />
+            colClass="col-12" hint="The lead line under the title, and the blurb on the shop card." />
           <ListingField {...shared} name="description" label="Full description" as="textarea" rows={6}
-            colClass="col-12" hint="Feed, temperament, history — anything a buyer would ask." />
+            colClass="col-12" hint="The main body on the goat's page — feed, temperament, history." />
           <ListingField {...shared} name="video_url" label="Video link" type="url" colClass="col-12"
-            hint="Optional video of the animal." />
+            hint="Optional. Adds a “Watch video” button beside the photos." />
         </div>
       </section>
 

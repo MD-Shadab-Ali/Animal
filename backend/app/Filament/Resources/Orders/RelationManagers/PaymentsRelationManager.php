@@ -58,6 +58,17 @@ class PaymentsRelationManager extends RelationManager
 
                 TextColumn::make('transaction_reference')->label('Reference')->placeholder('—'),
 
+
+                // Whether there is anything to look at, and a way straight to it.
+                TextColumn::make('proof')
+                    ->label('Receipt')
+                    ->badge()
+                    ->state(fn (Payment $record) => $record->hasProof() ? 'View' : 'None')
+                    ->color(fn (Payment $record) => $record->hasProof() ? 'success' : 'gray')
+                    ->icon(fn (Payment $record) => $record->hasProof() ? 'heroicon-o-paper-clip' : null)
+                    ->url(fn (Payment $record) => $record->proof_url)
+                    ->openUrlInNewTab(),
+
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (?string $state) => Payment::STATUSES[$state] ?? $state)

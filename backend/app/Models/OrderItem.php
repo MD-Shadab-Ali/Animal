@@ -10,6 +10,7 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id', 'goat_id', 'seller_id', 'seller_name',
         'goat_name', 'goat_sku', 'goat_thumbnail',
+        'weight_kg', 'price_per_kg',
         'unit_price', 'quantity', 'line_total',
         'commission_rate', 'commission_amount', 'seller_earning', 'payout_id',
         'fulfilment_status', 'fulfilment_note', 'fulfilment_updated_at',
@@ -18,6 +19,8 @@ class OrderItem extends Model
     protected function casts(): array
     {
         return [
+            'weight_kg'         => 'decimal:2',
+            'price_per_kg'      => 'decimal:2',
             'unit_price'        => 'decimal:2',
             'line_total'        => 'decimal:2',
             'commission_rate'   => 'decimal:2',

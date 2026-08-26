@@ -260,6 +260,33 @@ forms 6 a minute, checkout 10 a minute, and everything else 90 a minute.
 
 ---
 
+## Buying one goat vs the cart
+
+**Buy now** on a goat page is a purchase of *that* goat. It adds the animal to the cart
+and sends the buyer to `/checkout?buy=<id>`, where the summary, the totals and the order
+itself are scoped to that one line — anything else in the cart stays there. Previously it
+dropped the buyer on the whole-cart checkout, so someone with three goats already saved
+bought all four.
+
+`POST /checkout` takes an optional `goat_ids`. Absent, it means the whole cart, which is
+the ordinary path from the cart page. Present, it must name goats actually in the cart, and
+only those are ordered and removed.
+
+Two rules keep it honest:
+
+- **A coupon is redeemed by checking the cart out**, so it is ignored — and its box hidden —
+  during a single-item purchase. Spending a whole-basket voucher on one animal, or showing
+  a discount the server would not apply, are both worse than the rule.
+- **A stale `?buy=`** — the goat since removed, or already bought in another tab — says so
+  rather than offering an empty order with a live Place order button.
+
+There is deliberately no "you are only buying one of these" banner. The buttons say which
+route they take (**Check out this goat** vs **View cart (2)**), the summary lists exactly
+what is being bought, and the header still shows the cart count — so explaining it again on
+the checkout page is noise on the one screen that should carry none.
+
+---
+
 ## Getting paid for an order
 
 Money in is a **ledger**, not two columns on the order. `orders.paid_amount` and
@@ -345,11 +372,30 @@ and only from `pending`, so it can never drag a later order backwards.
    protects the money going out: seller earnings settle on `delivered`, so a delivery
    recorded against an unpaid order would let a seller draw a payout for money the
    platform never received.
-2. **Paying closes the order.** When the balance is settled on an order that is already
+2. **Paying closes the order — when the payment *is* the delivery.** When the balance is settled on an order that is already
    `out_for_delivery`, it goes to `delivered` on its own. Deliberately only from that
    stage — paying for a goat still on the farm must not mark it delivered. Turn the
    behaviour off with **Mark orders delivered once paid** in Configuration → Site settings
    → Marketplace.
+
+   This only ever fires for an order still owing money at the door — an advance plan, where
+   the rider collecting the balance genuinely *is* the moment of delivery. **An order paid
+   in full at checkout has no such signal**: the money arrived days earlier and says nothing
+   about whether the goat reached the yard, so a person has to confirm it. That is not a gap
+   to automate away — money cannot witness a delivery.
+
+   The buyer closes it instead. A **"Yes, my goat arrived"** button appears on their order
+   once it is out for delivery and fully paid — they are the one person with first-hand
+   knowledge, which beats a rider's phone call relayed to staff. It is recorded against them
+   in the order history ("Confirmed received by the customer"), because closing an order
+   releases the seller's earnings and that is worth being able to point at later.
+
+   The button is deliberately absent while money is still owed: those orders close themselves
+   when the driver records the cash, so offering it would be redundant and would fail.
+
+   Staff keep a fallback for buyers who never say anything: orders out for delivery and fully
+   paid appear under **Sales → Orders → "To confirm delivered"** and are counted in the Orders
+   navigation badge, so nothing sits forgotten holding up the farm's money.
 
 ### Cancelling
 

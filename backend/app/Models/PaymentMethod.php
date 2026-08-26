@@ -11,6 +11,7 @@ class PaymentMethod extends Model
         'code', 'name', 'instructions', 'logo', 'is_active', 'on_delivery_only',
         'supports_payout', 'requires_bank_name',
         'payee_account_name', 'payee_account_number', 'payee_bank_name', 'payee_qr_image',
+        'refund_eta',
         'requires_advance', 'advance_amount', 'advance_type', 'config', 'sort_order',
     ];
 

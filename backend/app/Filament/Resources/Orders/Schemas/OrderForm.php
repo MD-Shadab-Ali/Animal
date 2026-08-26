@@ -140,13 +140,13 @@ class OrderForm
                                 ->all())
                             ->required()
                             ->native(false)
-                            // Orders supplied entirely by one seller are run by that
-                            // seller; staff watch and can still cancel from the list.
-                            ->disabled(fn (?Order $record): bool => $record?->isSellerManaged() ?? false)
+                            // Seller-supplied orders are run by the seller and by
+                            // staff alike, so this stays editable on every order.
                             ->helperText(function (?Order $record): string {
                                 if ($record?->isSellerManaged()) {
                                     return 'Run by '.($record->items->first()?->seller_name ?? 'the seller')
-                                        .'. They move it forward; you can still cancel it from the orders list.';
+                                        .'. They move it forward and so can you — the last change wins, '
+                                        .'and every one is written to the order history below.';
                                 }
 
                                 if ($record && ! $record->canBeDelivered()) {

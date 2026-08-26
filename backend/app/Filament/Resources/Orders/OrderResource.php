@@ -64,11 +64,20 @@ class OrderResource extends Resource
     }
 
     /** Orders still waiting on the farm to act. */
+    /**
+     * Everything sitting on a person: new orders, and delivered-but-unconfirmed.
+     *
+     * The second half used to be invisible. An order paid in full at checkout
+     * has no payment left to close it, so it waits at "out for delivery" until
+     * somebody confirms it arrived — and holds up the seller's earnings while
+     * it waits.
+     */
     public static function getNavigationBadge(): ?string
     {
-        $pending = static::getModel()::where('status', 'pending')->count();
+        $waiting = static::getModel()::where('status', 'pending')->count()
+            + static::getModel()::query()->awaitingDeliveryConfirmation()->count();
 
-        return $pending > 0 ? (string) $pending : null;
+        return $waiting > 0 ? (string) $waiting : null;
     }
 
     public static function getNavigationBadgeColor(): ?string

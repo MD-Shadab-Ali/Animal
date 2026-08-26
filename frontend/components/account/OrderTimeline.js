@@ -8,7 +8,17 @@ const STEPS = [
   ['delivered', 'Delivered'],
 ];
 
-export default function OrderTimeline({ status, paid = 0, refunded = 0, formatAmount }) {
+export default function OrderTimeline({
+  status,
+  paid = 0,
+  refunded = 0,
+  formatAmount,
+  // The delivery promise made when the zone was chosen, and — once it is
+  // actually here — the day it turned up, which supersedes it.
+  estimate = null,
+  deliveredAt = null,
+  formatWhen,
+}) {
   if (status === 'cancelled') {
     // "Nothing has been charged" is only true when nothing was. Telling a buyer
     // who paid an advance that their money never left is the worst possible
@@ -32,20 +42,48 @@ export default function OrderTimeline({ status, paid = 0, refunded = 0, formatAm
 
   const currentIndex = STEPS.findIndex(([key]) => key === status);
 
-  return (
-    <ol className="timeline list-unstyled mb-0">
-      {STEPS.map(([key, label], index) => {
-        const done = index <= currentIndex;
+  // "When does my goat get here" is the question this part of the page exists
+  // to answer. An estimate that stops being shown the moment it starts to
+  // matter is not much of a promise.
+  const when = () => {
+    if (status === 'delivered') {
+      return deliveredAt && formatWhen
+        ? `Delivered on ${formatWhen(deliveredAt)}.`
+        : 'Delivered.';
+    }
 
-        return (
-          <li className={`timeline__step ${done ? 'is-done' : ''}`} key={key}>
-            <span className="timeline__dot" aria-hidden="true">
-              <i className={`bi ${done ? 'bi-check-lg' : 'bi-circle'}`} />
-            </span>
-            <span>{label}</span>
-          </li>
-        );
-      })}
-    </ol>
+    if (!estimate) return null;
+
+    return status === 'out_for_delivery'
+      ? `On its way — usually arrives within ${estimate}.`
+      : `Usually arrives within ${estimate} of dispatch.`;
+  };
+
+  const arrival = when();
+
+  return (
+    <>
+      <ol className="timeline list-unstyled mb-0">
+        {STEPS.map(([key, label], index) => {
+          const done = index <= currentIndex;
+
+          return (
+            <li className={`timeline__step ${done ? 'is-done' : ''}`} key={key}>
+              <span className="timeline__dot" aria-hidden="true">
+                <i className={`bi ${done ? 'bi-check-lg' : 'bi-circle'}`} />
+              </span>
+              <span>{label}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {arrival && (
+        <p className="small text-soft mt-3 mb-0">
+          <i className={`bi ${status === 'delivered' ? 'bi-check-circle' : 'bi-truck'} me-1`} aria-hidden="true" />
+          {arrival}
+        </p>
+      )}
+    </>
   );
 }

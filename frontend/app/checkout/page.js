@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import CartSummary from '@/components/cart/CartSummary';
 import CheckoutFields from '@/components/checkout/CheckoutFields';
@@ -12,8 +12,9 @@ import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 
-export default function CheckoutPage() {
+function CheckoutInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const settings = useSettings();
   const { user, token, isAuthenticated, loading: authLoading } = useAuth();
   const { cart, refresh } = useCart();
@@ -93,7 +94,26 @@ export default function CheckoutPage() {
     (zone) => String(zone.id) === String(form.delivery_zone_id)
   );
 
-  const subtotalAfterDiscount = Number(cart?.totals?.total || 0);
+  /*
+   * "Buy now" on a goat page arrives as ?buy=<id> and means that goat alone.
+   * Everything else in the cart stays where it is — ordering it too was the
+   * bug this exists to prevent.
+   */
+  const buyOnly = searchParams.get('buy');
+  // A listing sold by the kilo can be in the cart at several weights, so the
+  // goat id alone no longer says which line was bought.
+  const buyWeight = searchParams.get('kg');
+
+  const lineItems = buyOnly
+    ? (cart?.items || []).filter((item) => String(item.goat?.id) === String(buyOnly)
+      && (buyWeight === null || String(item.weight_kg) === String(buyWeight)))
+    : (cart?.items || []);
+
+  // A coupon belongs to the whole basket, so a single-item purchase is priced
+  // straight off its own lines and the coupon box is hidden.
+  const subtotalAfterDiscount = buyOnly
+    ? lineItems.reduce((sum, item) => sum + Number(item.line_total || 0), 0)
+    : Number(cart?.totals?.total || 0);
 
   const deliveryCharge = selectedZone
     ? (selectedZone.free_above !== null && subtotalAfterDiscount >= selectedZone.free_above ? 0 : selectedZone.charge)
@@ -130,6 +150,10 @@ export default function CheckoutPage() {
           ...form,
           payment_method: selectedMethod?.code || form.payment_method,
           payment_plan: paymentPlan,
+          // What the summary showed is exactly what gets ordered. Sent as cart
+          // lines, not goats, so one weight of a listing can be bought without
+          // the buyer's other weight of it coming too.
+          cart_item_ids: buyOnly ? lineItems.map((item) => item.id) : undefined,
         },
       });
       await refresh();
@@ -156,6 +180,28 @@ export default function CheckoutPage() {
             <h1 className="h4">Sign in to check out</h1>
             <p>You need an account so we can send you order updates.</p>
             <Link href="/login" className="btn btn-brand px-4">Sign in</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // A stale ?buy= — the goat was removed, or already bought in another tab.
+  // Better to say so than to show an empty summary with a live Place order.
+  if (buyOnly && !lineItems.length) {
+    return (
+      <div className="section">
+        <div className="container">
+          <div className="empty">
+            <i className="bi bi-bag-x" />
+            <h1 className="h4">That goat is no longer in your cart</h1>
+            <p className="text-soft">It may have been removed, or already ordered.</p>
+            <div className="d-flex gap-2 justify-content-center">
+              {cart?.items?.length > 0 && (
+                <Link href="/checkout" className="btn btn-brand px-4">Check out my cart</Link>
+              )}
+              <Link href="/shop" className="btn btn-quiet px-4">Browse goats</Link>
+            </div>
           </div>
         </div>
       </div>
@@ -201,16 +247,12 @@ export default function CheckoutPage() {
             </div>
 
             <div className="col-lg-4">
-              <CartSummary deliveryCharge={deliveryCharge}>
-                <ul className="list-unstyled small text-soft mb-3">
-                  {cart.items.map((item) => (
-                    <li key={item.id} className="d-flex justify-content-between gap-2">
-                      <span className="text-truncate">{item.goat.name} × {item.quantity}</span>
-                      <span>{formatMoney(item.line_total, settings)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CartSummary>
+              <CartSummary
+                deliveryCharge={deliveryCharge}
+                showCoupon={!buyOnly}
+                totals={buyOnly ? { subtotal: subtotalAfterDiscount, discount: 0, total: subtotalAfterDiscount } : null}
+                items={lineItems}
+              />
 
               <button className="btn btn-brand btn-lg w-100 mt-3" type="submit" disabled={placing}>
                 {placing ? 'Placing order…' : 'Place order'}
@@ -226,5 +268,23 @@ export default function CheckoutPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+/**
+ * useSearchParams() bails out of static rendering, so the page that reads
+ * ?buy= sits behind a boundary — same shape as the seller listings page.
+ */
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={(
+      <div className="section">
+        <div className="container text-center py-5">
+          <span className="spinner-border text-brand" role="status" />
+        </div>
+      </div>
+    )}>
+      <CheckoutInner />
+    </Suspense>
   );
 }

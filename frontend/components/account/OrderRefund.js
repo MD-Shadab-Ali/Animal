@@ -82,10 +82,25 @@ export default function OrderRefund({ order, onRequested }) {
           <i className="bi bi-check-circle-fill me-1 text-success" aria-hidden="true" />
           Refunded
         </h2>
-        <p className="text-soft small mb-0">
+        <p className="text-soft small mb-1">
           We sent {formatMoney(refund.sent, settings)} back
-          {refund.destination ? ` to ${refund.destination}` : ''}. It can take a day or two to
-          reach you.
+          {refund.destination ? ` to ${refund.destination}` : ''}
+          {refund.sent_at ? ` on ${formatDateTime(refund.sent_at)}` : ''}.
+        </p>
+
+        {/* What this rail actually does. A wallet lands instantly — telling
+            someone to wait two days for money already in their hand is how you
+            earn a support call. With no ETA on file, promise nothing. */}
+        <p className="text-soft small mb-0">
+          {refund.eta
+            ? `Refunds by ${refund.method_label} usually arrive ${refund.eta}.`
+            : 'Please allow a little time for it to show on your side.'}
+          {refund.reference && (
+            <>
+              {' '}Reference <span className="text-ink">{refund.reference}</span> — quote this
+              if you need to chase it.
+            </>
+          )}
         </p>
       </div>
     );
@@ -104,7 +119,8 @@ export default function OrderRefund({ order, onRequested }) {
         <p className="text-soft small mb-0">
           We have your request from {formatDateTime(refund.requested_at)} and are sending
           {refund.destination ? ` it to ${refund.destination}` : ' your money back'}. You will
-          get an email the moment it leaves our account.
+          get an email the moment it leaves our account
+          {refund.eta ? `, and it should arrive ${refund.eta} after that` : ''}.
         </p>
       </div>
     );

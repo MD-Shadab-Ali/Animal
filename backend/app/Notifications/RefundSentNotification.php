@@ -27,17 +27,30 @@ class RefundSentNotification extends Notification implements ShouldQueue
         $order = $this->payment->order;
         $frontend = rtrim((string) config('app.frontend_url'), '/');
 
-        return (new MailMessage)
+        $eta = $this->payment->arrival_eta;
+
+        $message = (new MailMessage)
             ->subject('Refund sent — order '.$order->order_number)
             ->greeting('Your refund is on its way')
             ->line('We have sent '.$symbol.number_format((float) $this->payment->amount, 2)
                 .' back for order '.$order->order_number.'.')
             ->line($this->payment->refund_destination
                 ? 'Sent to: '.$this->payment->refund_destination
-                : 'Sent by '.$this->payment->method_label.'.')
-            ->line($this->payment->transaction_reference
-                ? 'Reference: '.$this->payment->transaction_reference
-                : 'It can take a day or two to show up on your side.')
-            ->action('View your order', $frontend.'/account/orders/'.$order->order_number);
+                : 'Sent by '.$this->payment->method_label.'.');
+
+        // Say what this rail actually does. A wallet lands instantly, and
+        // telling someone to wait two days for money already in their hand is
+        // how you get a support call. If nobody has said, promise nothing.
+        $message->line($eta
+            ? 'Refunds by '.$this->payment->method_label.' usually arrive '.$eta.'.'
+            : 'Please allow a little time for it to show on your side.');
+
+        // The reference is always useful, and always available if we have one.
+        if ($this->payment->transaction_reference) {
+            $message->line('Reference: '.$this->payment->transaction_reference
+                .' — quote this if you need to chase it.');
+        }
+
+        return $message->action('View your order', $frontend.'/account/orders/'.$order->order_number);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,7 +16,7 @@ class Order extends Model
         'order_number', 'user_id', 'delivery_zone_id', 'coupon_id',
         'customer_name', 'customer_phone', 'customer_email',
         'address_line', 'area', 'city', 'postal_code', 'order_notes',
-        'subtotal', 'discount', 'delivery_charge', 'total', 'currency',
+        'subtotal', 'discount', 'delivery_charge', 'delivery_estimate', 'total', 'currency',
         'delivery_seller_id', 'delivery_earning', 'delivery_payout_id',
         'payment_method', 'payment_plan', 'payment_status', 'paid_amount',
         'advance_required', 'transaction_id',
@@ -45,6 +46,16 @@ class Order extends Model
         'delivered'        => 'Delivered',
         'cancelled'        => 'Cancelled',
     ];
+
+    /**
+     * A note to attach to the next status change.
+     *
+     * Transient, not a column: the history row is where it belongs. Set it
+     * before saving and the observer writes it alongside the change, so "the
+     * customer said it arrived" is distinguishable from staff clicking the
+     * same button.
+     */
+    public ?string $statusNote = null;
 
     public const PAYMENT_PLANS = [
         'full'        => 'Paid in full up front',
@@ -250,9 +261,56 @@ class Order extends Model
      * call off. Once delivered there is not — that is a return, not a
      * cancellation, and it is a conversation rather than a button.
      */
+    /**
+     * Out for delivery, fully paid, and waiting on a person to say it arrived.
+     *
+     * Nothing will close these on its own and nothing should: money cannot
+     * witness a delivery. An order paid in full at checkout has no payment left
+     * to trigger the close, so someone who was there has to confirm it — and
+     * until they do the seller's earnings never settle, because earnings settle
+     * on `delivered`. That makes these worth chasing, not just listing.
+     */
+    public function scopeAwaitingDeliveryConfirmation(Builder $query): Builder
+    {
+        return $query->where('status', 'out_for_delivery')
+            ->whereColumn('paid_amount', '>=', 'total');
+    }
+
+    /**
+     * The buyer can tell us it turned up.
+     *
+     * Only once it is actually on its way, and only when nothing else is
+     * outstanding — an order still owing money at the door closes itself when
+     * the rider records the cash, so the button would be redundant there and
+     * misleading if it failed.
+     */
+    public function canConfirmReceipt(): bool
+    {
+        return $this->status === 'out_for_delivery' && $this->canBeDelivered();
+    }
+
     public function isCancellable(): bool
     {
         return ! in_array($this->status, ['delivered', 'cancelled'], true);
+    }
+
+    /**
+     * The line state that matches an order state.
+     *
+     * Defined once because it was defined twice: the observer and the seller
+     * service each carried their own copy, so a line could say "Preparing the
+     * animal" under a timeline still reading Confirmed. "Preparing" on the
+     * buyer's timeline is `processing` — confirming an order does not mean
+     * anyone has touched the animal yet.
+     */
+    public static function lineStatusFor(string $status): ?string
+    {
+        return match ($status) {
+            'processing'       => 'preparing',
+            'out_for_delivery' => 'handed_over',
+            'delivered'        => 'handed_over',
+            default            => null,
+        };
     }
 
     public function getStatusLabelAttribute(): string

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+
 use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Models\Category;
 use App\Models\DeliveryZone;
@@ -14,7 +15,9 @@ use App\Models\User;
 use App\Services\PaymentService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
 use Livewire\Livewire;
@@ -693,4 +696,121 @@ class OrderPaymentTest extends TestCase
             ->assertOk()
             ->assertSee('Confirmed');
     }
+
+    /**
+     * The screenshot is the evidence staff check a claim against, so it has to
+     * reach them. It was being stored and then never rendered anywhere.
+     */
+    public function test_the_receipt_the_buyer_attached_reaches_the_admin_panel(): void
+    {
+        Storage::fake('public');
+
+        $order = $this->placeOrder();
+
+        $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
+            'method' => 'esewa',
+            'amount' => $order->total,
+            'transaction_reference' => 'ESW-778899',
+            'proof' => UploadedFile::fake()->image('receipt.png'),
+        ])->assertCreated()->json('data.reference');
+
+        $payment = Payment::where('reference', $reference)->firstOrFail();
+
+        // Stored...
+        $this->assertTrue($payment->hasProof());
+        $this->assertTrue($payment->proofIsImage());
+        Storage::disk('public')->assertExists($payment->proof);
+
+        // ...and actually shown, not just kept.
+        $admin = User::where('role', 'admin')->firstOrFail();
+
+        $this->actingAs($admin, 'web')
+            ->get('/admin/payments/'.$payment->getKey())
+            ->assertOk()
+            ->assertSee($payment->proof, false)
+            ->assertSee('ESW-778899');
+
+        $this->actingAs($admin, 'web')
+            ->get('/admin/payments')
+            ->assertOk()
+            ->assertSee($payment->proof, false);
+    }
+
+    public function test_a_claim_without_a_receipt_says_so_rather_than_breaking(): void
+    {
+        $order = $this->placeOrder();
+
+        $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
+            'method' => 'esewa',
+            'amount' => $order->total,
+        ])->assertCreated()->json('data.reference');
+
+        $payment = Payment::where('reference', $reference)->firstOrFail();
+
+        $this->assertFalse($payment->hasProof());
+        $this->assertNull($payment->proof_url);
+
+        $this->actingAs(User::where('role', 'admin')->firstOrFail(), 'web')
+            ->get('/admin/payments/'.$payment->getKey())
+            ->assertOk()
+            ->assertSee('No receipt was attached');
+    }
+
+    /**
+     * Money cannot witness a delivery.
+     *
+     * An advance order closes itself because the last payment *is* the delivery
+     * event — the rider took cash at the door. An order paid in full at checkout
+     * has no such signal, so it waits for a person. That is correct, but it must
+     * not be invisible: until someone confirms it, the seller's earnings never
+     * settle.
+     */
+    public function test_a_prepaid_order_waits_for_a_person_and_is_surfaced(): void
+    {
+        $order = $this->placeOrder();
+
+        app(PaymentService::class)->record($order, [
+            'amount' => $order->total,
+            'method' => 'esewa',
+        ]);
+
+        $order->fresh()->update(['status' => 'out_for_delivery']);
+        $order = $order->fresh();
+
+        // Nothing is blocking it — and nothing will close it either.
+        $this->assertTrue($order->isFullyPaid());
+        $this->assertTrue($order->canBeDelivered());
+        $this->assertSame('out_for_delivery', $order->status);
+
+        // So it shows up in the queue that needs a human.
+        $this->assertTrue(
+            Order::query()->awaitingDeliveryConfirmation()->whereKey($order->id)->exists()
+        );
+
+        $admin = User::where('role', 'admin')->firstOrFail();
+
+        Livewire::actingAs($admin);
+        Livewire::test(ListOrders::class, ['activeTab' => 'to_confirm'])
+            ->assertCanSeeTableRecords([$order]);
+
+        // A person confirms it, and only then does it close.
+        $order->update(['status' => 'delivered']);
+
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertFalse(
+            Order::query()->awaitingDeliveryConfirmation()->whereKey($order->id)->exists()
+        );
+    }
+
+    /** An unpaid order out for delivery is not waiting on a person, but on money. */
+    public function test_an_unpaid_order_is_not_in_the_confirm_queue(): void
+    {
+        $order = $this->placeOrder();
+        $order->update(['status' => 'out_for_delivery']);
+
+        $this->assertFalse(
+            Order::query()->awaitingDeliveryConfirmation()->whereKey($order->id)->exists()
+        );
+    }
+
 }

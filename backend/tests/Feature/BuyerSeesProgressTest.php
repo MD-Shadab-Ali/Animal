@@ -162,4 +162,88 @@ class BuyerSeesProgressTest extends TestCase
 
         $this->assertSame('out_for_delivery', $order->fresh()->status);
     }
+
+    /**
+     * What a line says has to agree with the step the order is on.
+     *
+     * `confirmed` used to drag every line to "preparing", so the buyer saw an
+     * amber "Preparing the animal" under a timeline still reading Confirmed —
+     * claiming work nobody had started.
+     */
+    public function test_a_line_never_runs_ahead_of_the_order_timeline(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat()->id]);
+
+        // Placed: nothing has happened to the animal.
+        $this->assertSame('pending', $order->items->first()->fulfilment_status);
+
+        $order->update(['status' => 'confirmed']);
+
+        $this->assertSame(
+            'pending',
+            $order->fresh()->items->first()->fulfilment_status,
+            'Confirming an order does not mean anyone has started preparing'
+        );
+
+        $line = $this->buyerSees($order)['items'][0];
+
+        $this->assertSame('pending', $line['fulfilment']['status']);
+        $this->assertSame('Not started', $line['fulfilment']['label']);
+
+        // The order reaching "Preparing" is what makes the line say so.
+        $order->fresh()->update(['status' => 'processing']);
+
+        $line = $this->buyerSees($order)['items'][0];
+
+        $this->assertSame('preparing', $line['fulfilment']['status']);
+        $this->assertSame('Preparing the animal', $line['fulfilment']['label']);
+    }
+
+    /**
+     * A supplier's job ends at the courier; the buyer's does not.
+     *
+     * The stored line state stops at `handed_over` because that is the last
+     * thing the farm actually does. Telling the buyer their goat is with the
+     * courier once it is standing in their yard is simply out of date.
+     */
+    public function test_a_delivered_order_stops_saying_the_goat_is_with_the_courier(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat()->id]);
+
+        $order->update(['status' => 'out_for_delivery']);
+
+        $line = $this->buyerSees($order)['items'][0];
+
+        $this->assertSame('handed_over', $line['fulfilment']['status']);
+        $this->assertSame('Handed to the courier', $line['fulfilment']['label']);
+
+        // Delivery needs the money in, as everywhere else.
+        $this->payInFull($order->fresh());
+
+        $this->assertSame('delivered', $order->fresh()->status);
+
+        $line = $this->buyerSees($order)['items'][0];
+
+        $this->assertSame('delivered', $line['fulfilment']['status']);
+        $this->assertSame('Delivered', $line['fulfilment']['label']);
+
+        // The supplier's own record is untouched: handing over is what they did.
+        $this->assertSame('handed_over', $order->fresh()->items->first()->fulfilment_status);
+    }
+
+    /** A cancelled line stays cancelled, whatever the order says. */
+    public function test_a_cancelled_line_is_not_relabelled_as_delivered(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat()->id]);
+
+        $order->items()->update(['fulfilment_status' => 'cancelled']);
+
+        $order->update(['status' => 'out_for_delivery']);
+        $this->payInFull($order->fresh());
+
+        $line = $this->buyerSees($order)['items'][0];
+
+        $this->assertSame('cancelled', $line['fulfilment']['status']);
+    }
+
 }

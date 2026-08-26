@@ -93,6 +93,19 @@ export function toFormData(values) {
       return;
     }
 
+    // Several files under one name — `images[]` is what Laravel's `images.*`
+    // rules expect. Without this an array lands as the string "[object File]".
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (typeof File !== 'undefined' && entry instanceof File) {
+          form.append(`${key}[]`, entry, entry.name);
+        } else {
+          form.append(`${key}[]`, entry);
+        }
+      });
+      return;
+    }
+
     form.append(key, value);
   });
 

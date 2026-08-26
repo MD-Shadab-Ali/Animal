@@ -37,6 +37,38 @@ class CheckoutService
             throw ValidationException::withMessages(['cart' => ['Your cart is empty.']]);
         }
 
+        /*
+         * "Buy now" on a goat means that goat, not everything the buyer happens
+         * to have left in their cart from last week. Without this, clicking it
+         * with three unrelated animals already in the cart ordered all four.
+         */
+        $items = $cart->items;
+
+        // Cart lines win over goat ids where both are sent: a listing sold by
+        // the kilo can sit on several lines, and buying the 25 kg one must not
+        // drag the 37 kg one along with it.
+        if (! empty($data['cart_item_ids'])) {
+            $items = $items->whereIn('id', $data['cart_item_ids'])->values();
+
+            if ($items->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'cart_item_ids' => ['Those items are not in your cart any more.'],
+                ]);
+            }
+        } elseif (! empty($data['goat_ids'])) {
+            $items = $items->whereIn('goat_id', $data['goat_ids'])->values();
+
+            if ($items->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'goat_ids' => ['Those goats are not in your cart any more.'],
+                ]);
+            }
+        }
+
+        // Whether this is the whole cart decides what happens to the coupon and
+        // to everything left behind.
+        $wholeCart = $items->count() === $cart->items->count();
+
         $method = PaymentMethod::active()->where('code', $data['payment_method'])->first();
 
         if (! $method) {
@@ -72,9 +104,11 @@ class CheckoutService
 
         $lowStockThreshold = (int) Setting::get('low_stock_threshold', 0);
 
-        [$order, $lowStock] = DB::transaction(function () use ($user, $data, $cart, $zone, $method, $plan, $lowStockThreshold) {
+        [$order, $lowStock] = DB::transaction(function () use (
+            $user, $data, $cart, $items, $wholeCart, $zone, $method, $plan, $lowStockThreshold
+        ) {
             $lowStock = [];
-            $goatIds = $cart->items->pluck('goat_id')->all();
+            $goatIds = $items->pluck('goat_id')->all();
 
             // Lock the goats for the duration of the transaction.
             $goats = Goat::with('seller')->whereIn('id', $goatIds)->lockForUpdate()->get()->keyBy('id');
@@ -82,7 +116,12 @@ class CheckoutService
             $subtotal = 0.0;
             $lines    = [];
 
-            foreach ($cart->items as $item) {
+            // A listing sold by the kilo can appear on several lines at once,
+            // one per weight, and they all draw on the same animals. Counted up
+            // front so the stock check below sees the whole claim, not one line.
+            $claimed = $items->groupBy('goat_id')->map->sum('quantity');
+
+            foreach ($items as $item) {
                 $goat = $goats[$item->goat_id] ?? null;
 
                 if (! $goat || $goat->status !== 'published') {
@@ -91,21 +130,36 @@ class CheckoutService
                     ]);
                 }
 
-                if ($goat->track_stock && $item->quantity > $goat->stock) {
+                if ($goat->track_stock && ($claimed[$goat->id] ?? 0) > $goat->stock) {
                     throw ValidationException::withMessages([
                         'cart' => ["Only {$goat->stock} of {$goat->name} is left."],
                     ]);
                 }
 
-                $unitPrice = $goat->effective_price;
+                // Re-checked here and not just in the cart: the seller may have
+                // narrowed the weights they supply while this cart sat waiting.
+                if ($goat->is_weight_priced && ! $goat->isWeightAllowed((float) $item->weight_kg)) {
+                    throw ValidationException::withMessages([
+                        'cart' => [$goat->name.' is no longer sold at '.(float) $item->weight_kg
+                            .' kg. Please pick a weight between '.$goat->lightest_weight
+                            .' kg and '.$goat->heaviest_weight.' kg.'],
+                    ]);
+                }
+
+                $unitPrice = $goat->is_weight_priced
+                    ? $goat->priceForWeight((float) $item->weight_kg)
+                    : $goat->effective_price;
+
                 $lineTotal = round($unitPrice * $item->quantity, 2);
                 $subtotal += $lineTotal;
 
                 $lines[] = [
-                    'goat'       => $goat,
-                    'quantity'   => $item->quantity,
-                    'unit_price' => $unitPrice,
-                    'line_total' => $lineTotal,
+                    'goat'         => $goat,
+                    'quantity'     => $item->quantity,
+                    'weight_kg'    => $goat->is_weight_priced ? (float) $item->weight_kg : null,
+                    'price_per_kg' => $goat->is_weight_priced ? (float) $goat->price_per_kg : null,
+                    'unit_price'   => $unitPrice,
+                    'line_total'   => $lineTotal,
                 ];
             }
 
@@ -117,7 +171,10 @@ class CheckoutService
                 ]);
             }
 
-            $coupon   = $cart->coupon;
+            // A coupon is applied to the cart, so it is redeemed by checking
+            // the cart out. Letting it discount a single-item purchase would
+            // spend a whole-basket voucher on one animal.
+            $coupon   = $wholeCart ? $cart->coupon : null;
             $discount = 0.0;
 
             if ($coupon && $coupon->isRedeemable($subtotal, $user->id)) {
@@ -145,6 +202,9 @@ class CheckoutService
                 'subtotal'        => $subtotal,
                 'discount'        => $discount,
                 'delivery_charge' => $deliveryCharge,
+                // Kept with the order so the promise survives a zone being
+                // edited or removed later.
+                'delivery_estimate' => $zone->estimated_time,
                 'total'           => $total,
                 'currency'        => Setting::currencyCode(),
 
@@ -176,6 +236,10 @@ class CheckoutService
                     'goat_name'      => $goat->name,
                     'goat_sku'       => $goat->sku,
                     'goat_thumbnail' => $goat->thumbnail,
+                    // Kept on the line so the order still reads correctly after
+                    // the seller changes their rate.
+                    'weight_kg'      => $line['weight_kg'],
+                    'price_per_kg'   => $line['price_per_kg'],
                     'unit_price'     => $line['unit_price'],
                     'quantity'       => $line['quantity'],
                     'line_total'     => $line['line_total'],
@@ -217,8 +281,12 @@ class CheckoutService
                 $coupon->increment('used_count');
             }
 
-            $cart->items()->delete();
-            $cart->update(['coupon_id' => null]);
+            // Only what was actually bought leaves the cart.
+            $cart->items()->whereKey($items->pluck('id'))->delete();
+
+            if ($cart->items()->count() === 0) {
+                $cart->update(['coupon_id' => null]);
+            }
 
             return [$order->load('items', 'deliveryZone'), $lowStock];
         });

@@ -134,6 +134,38 @@ class Payment extends Model
         return round((float) $this->amount * ($this->type === 'refund' ? -1 : 1), 2);
     }
 
+    /** The receipt the buyer attached, if they attached one. */
+    public function getProofUrlAttribute(): ?string
+    {
+        return $this->proof ? asset('storage/'.$this->proof) : null;
+    }
+
+    public function hasProof(): bool
+    {
+        return filled($this->proof);
+    }
+
+    /** Images can be shown inline; a PDF has to be a link. */
+    public function proofIsImage(): bool
+    {
+        return $this->hasProof() && in_array(
+            strtolower(pathinfo($this->proof, PATHINFO_EXTENSION)),
+            ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+            true
+        );
+    }
+
+    /**
+     * When money sent on this rail should land, in the rail's own words.
+     *
+     * Null when nobody has said, which is a cue to promise nothing rather than
+     * to guess.
+     */
+    public function getArrivalEtaAttribute(): ?string
+    {
+        return PaymentMethod::where('code', $this->method)->value('refund_eta') ?: null;
+    }
+
     public function getMethodLabelAttribute(): string
     {
         return PaymentMethod::where('code', $this->method)->value('name') ?? $this->method;

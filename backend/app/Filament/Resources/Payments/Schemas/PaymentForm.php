@@ -70,6 +70,32 @@ class PaymentForm
                         ->columnSpanFull(),
                 ]),
 
+            // The evidence. Checking a claim means looking at what the buyer
+            // sent, so it belongs on the screen rather than only in storage.
+            Section::make('Receipt')
+                ->description('What the buyer attached when they told us they had paid.')
+                ->schema([
+                    Placeholder::make('proof')
+                        ->hiddenLabel()
+                        ->content(function (?Payment $record) {
+                            if (! $record?->hasProof()) {
+                                return 'No receipt was attached.';
+                            }
+
+                            $url = e($record->proof_url);
+
+                            return new HtmlString($record->proofIsImage()
+                                ? '<a href="'.$url.'" target="_blank" rel="noopener">'
+                                    .'<img src="'.$url.'" alt="Payment receipt" '
+                                    .'style="max-width:420px;width:100%;height:auto;'
+                                    .'border-radius:.5rem;border:1px solid rgba(0,0,0,.1)" />'
+                                    .'</a><div style="margin-top:.5rem;font-size:.8rem">'
+                                    .'<a href="'.$url.'" target="_blank" rel="noopener">Open full size</a></div>'
+                                : '<a href="'.$url.'" target="_blank" rel="noopener">'
+                                    .'Open the attached file</a>');
+                        }),
+                ]),
+
             Section::make('Order')
                 ->columns(3)
                 ->schema([

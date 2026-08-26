@@ -7,7 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CartItem extends Model
 {
-    protected $fillable = ['cart_id', 'goat_id', 'quantity'];
+    protected $fillable = ['cart_id', 'goat_id', 'quantity', 'weight_kg'];
+
+    protected function casts(): array
+    {
+        return ['weight_kg' => 'decimal:2'];
+    }
 
     public function cart(): BelongsTo
     {
@@ -19,9 +24,24 @@ class CartItem extends Model
         return $this->belongsTo(Goat::class);
     }
 
+    /**
+     * What this line costs each.
+     *
+     * A listing sold by the kilo is priced off the weight the buyer chose,
+     * not off the listing's own weight -- that is the whole point of the line
+     * carrying a weight at all.
+     */
     public function getUnitPriceAttribute(): float
     {
-        return (float) ($this->goat?->effective_price ?? 0);
+        $goat = $this->goat;
+
+        if (! $goat) {
+            return 0.0;
+        }
+
+        return $goat->is_weight_priced
+            ? $goat->priceForWeight((float) $this->weight_kg)
+            : (float) $goat->effective_price;
     }
 
     public function getLineTotalAttribute(): float

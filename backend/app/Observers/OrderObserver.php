@@ -65,7 +65,12 @@ class OrderObserver
             'user_id'     => auth()->id(),
             'from_status' => $previous,
             'to_status'   => $order->status,
+            // Whoever moved it may have said why; for a delivery confirmed by
+            // the customer that distinction matters later.
+            'note'        => $order->statusNote,
         ]);
+
+        $order->statusNote = null;
 
         // A cancelled order releases its goats back into the shop, and no seller
         // should be left with a line still asking them to prepare an animal.
@@ -100,12 +105,7 @@ class OrderObserver
             return;
         }
 
-        $target = match ($order->status) {
-            'confirmed', 'processing'   => 'preparing',
-            'out_for_delivery'          => 'handed_over',
-            'delivered'                 => 'handed_over',
-            default                     => null,
-        };
+        $target = Order::lineStatusFor($order->status);
 
         if (! $target) {
             return;

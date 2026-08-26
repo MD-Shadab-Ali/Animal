@@ -99,9 +99,15 @@ export function CartProvider({ children }) {
     }
   }, []);
 
-  const addItem = useCallback(async (goatId, quantity = 1) => {
+  // `weightKg` only applies to listings sold by the kilo, where it decides both
+  // the price and which cart line this lands on. Left out for a fixed listing.
+  const addItem = useCallback(async (goatId, quantity = 1, weightKg = null) => {
     if (!requireAuth()) return null;
-    return run(() => apiFetch('/cart', { method: 'POST', token, body: { goat_id: goatId, quantity } }));
+
+    const body = { goat_id: goatId, quantity };
+    if (weightKg != null) body.weight_kg = weightKg;
+
+    return run(() => apiFetch('/cart', { method: 'POST', token, body }));
   }, [requireAuth, run, token]);
 
   const updateItem = useCallback((itemId, quantity) =>
@@ -142,8 +148,13 @@ export function CartProvider({ children }) {
 
   // Lets a product card ask "is this one already in the cart?" so the button can
   // reflect it instead of always offering to add again.
+  //
+  // A listing sold by the kilo can be on several lines at once, so a weight
+  // narrows it to that one. Without a weight this answers for the listing as a
+  // whole, which is what the cards on a grid want.
   const cartItemFor = useCallback(
-    (goatId) => (cart?.items || []).find((item) => item.goat?.id === goatId) || null,
+    (goatId, weightKg = null) => (cart?.items || []).find((item) => item.goat?.id === goatId
+      && (weightKg == null || Number(item.weight_kg) === Number(weightKg))) || null,
     [cart]
   );
 

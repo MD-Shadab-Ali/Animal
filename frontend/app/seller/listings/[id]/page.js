@@ -47,7 +47,7 @@ export default function EditListingPage() {
 
       <div className="d-flex flex-wrap align-items-center gap-3 mb-4">
         <h1 className="h4 mb-0">Edit listing</h1>
-        <ListingStatusPill status={listing.approval_status} />
+        <ListingStatusPill status={listing.state} />
       </div>
 
       {listing.approval_status === 'rejected' && listing.rejection_reason && (
@@ -59,8 +59,10 @@ export default function EditListingPage() {
       {!listing.is_editable ? (
         <div className="panel">
           <p className="mb-2">
-            This listing is {listing.approval_status === 'pending' ? 'waiting for review' : 'live in the shop'},
-            so it is locked to keep the moderated version and the public version the same.
+            {listing.state === 'sold'
+              ? 'This goat has sold, so its listing is kept exactly as it was bought.'
+              : `This listing is ${listing.state === 'pending' ? 'waiting for review' : 'live in the shop'},
+                 so it is locked to keep the moderated version and the public version the same.`}
           </p>
           <p className="text-soft small mb-3">Contact us if something needs changing.</p>
           <Link href="/contact" className="btn btn-quiet">Contact us</Link>
