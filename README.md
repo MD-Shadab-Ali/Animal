@@ -582,5 +582,8 @@ Animal Marketplace/
 │   ├── components/            layout, home, goat, cart, checkout, account
 │   ├── context/               Auth, Cart, Site
 │   └── lib/                   API client, settings, formatting
-└── docs/ARCHITECTURE.md
+└── docs/
+    ├── ARCHITECTURE.md        Stack, schema, order lifecycle
+    ├── BACKEND-STATUS.md      What is built, what is not
+    └── ADMIN-PANEL-FLOW.md    Admin panel screen by screen, and the buyer/seller flows
 ```

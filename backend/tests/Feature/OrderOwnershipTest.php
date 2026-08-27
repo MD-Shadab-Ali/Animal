@@ -204,6 +204,76 @@ class OrderOwnershipTest extends TestCase
         $this->assertSame('published', $goat->fresh()->status);
     }
 
+    public function test_the_admin_status_action_only_offers_the_next_step(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat('Sequenced Goat')->id]);
+        $admin = User::where('role', 'admin')->firstOrFail();
+
+        $this->actingAs($admin);
+
+        // Pending. Out for delivery is three states away, and picking it would
+        // leave an order that had never been Confirmed or Prepared -- a buyer
+        // timeline describing a sequence that did not happen.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order, data: ['status' => 'out_for_delivery'])
+            ->assertHasTableActionErrors(['status']);
+
+        $this->assertSame('pending', $order->fresh()->status);
+
+        // The one step it may take.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order, data: ['status' => 'confirmed'])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('confirmed', $order->fresh()->status);
+
+        // And no going back to where it came from.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order->fresh(), data: ['status' => 'pending'])
+            ->assertHasTableActionErrors(['status']);
+
+        $this->assertSame('confirmed', $order->fresh()->status);
+    }
+
+    public function test_cancelling_needs_no_steps_at_all(): void
+    {
+        // Both orders placed first: orderFor() signs in as the buyer to go
+        // through checkout, so acting as the admin has to come after it.
+        $early = $this->orderFor([$this->sellerGoat('Early Cancel Goat')->id]);
+        $late  = $this->orderFor([$this->sellerGoat('Late Cancel Goat')->id]);
+        $late->update(['status' => 'processing']);
+
+        $this->actingAs(User::where('role', 'admin')->firstOrFail());
+
+        // Straight from Pending.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $early, data: ['status' => 'cancelled'])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('cancelled', $early->fresh()->status);
+
+        // And from the middle of the run. An order can fall over anywhere, so
+        // cancelling is not a step in the sequence and never waits for one.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $late->fresh(), data: ['status' => 'cancelled'])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('cancelled', $late->fresh()->status);
+    }
+
+    public function test_a_finished_order_has_no_status_action_left(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat('Done Goat')->id]);
+        $order->update(['status' => 'cancelled']);
+
+        $this->actingAs(User::where('role', 'admin')->firstOrFail());
+
+        // Nothing to advance and nothing to cancel, so the control goes away
+        // rather than opening onto an empty dropdown.
+        Livewire::test(ListOrders::class)
+            ->assertTableActionHidden('updateStatus', $order->fresh());
+    }
+
     public function test_the_admin_status_action_is_available_on_every_order(): void
     {
         $sellerOrder = $this->orderFor([$this->sellerGoat('Seller Only Goat')->id]);

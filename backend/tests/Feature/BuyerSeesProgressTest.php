@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use Filament\Actions\Testing\TestAction;
+use App\Filament\Resources\Orders\Pages\ListOrders;
 use App\Models\Category;
 use App\Models\DeliveryZone;
 use App\Models\Goat;
@@ -13,6 +15,9 @@ use App\Services\SellerFulfilmentService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -61,6 +66,111 @@ class BuyerSeesProgressTest extends TestCase
         ])->assertCreated()->json('data.order_number');
 
         return Order::where('order_number', $number)->firstOrFail();
+    }
+
+    public function test_a_note_and_photo_left_by_staff_reach_the_buyer(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat('Photographed Goat')->id]);
+
+        Storage::fake('public');
+        $this->actingAs(User::where('role', 'admin')->firstOrFail());
+
+        // One step at a time: the admin panel only ever offers the next status,
+        // so reaching Preparing means passing through Confirmed first.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order, data: ['status' => 'confirmed'])
+            ->assertHasNoTableActionErrors();
+
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order->fresh(), data: [
+                'status' => 'processing',
+                'note'   => 'Your goat is being prepared. Photo attached.',
+                'photo'  => UploadedFile::fake()->image('goat.jpg'),
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $entry = $order->fresh()->statusHistories()
+            ->where('to_status', 'processing')->latest('id')->firstOrFail();
+
+        $this->assertNotNull($entry->photo);
+        Storage::disk('public')->assertExists($entry->photo);
+
+        // The whole point: what staff wrote and photographed has to come back
+        // out on the buyer's own order, not sit in an admin-only column.
+        Sanctum::actingAs($this->buyer);
+
+        $history = collect($this->getJson('/api/v1/orders/'.$order->order_number)
+            ->assertOk()
+            ->json('data.history'))
+            ->firstWhere('status', 'processing');
+
+        $this->assertSame('Your goat is being prepared. Photo attached.', $history['note']);
+        $this->assertStringContainsString($entry->photo, $history['photo']);
+    }
+
+    public function test_the_photo_field_belongs_to_preparing_alone(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat('Scoped Goat')->id]);
+
+        $this->actingAs(User::where('role', 'admin')->firstOrFail());
+
+        $action = TestAction::make('updateStatus')->table($order);
+
+        $form = Livewire::test(ListOrders::class)->mountAction($action);
+
+        // Confirmed is about where the order is, not what the animal looks
+        // like, so there is nothing to photograph yet.
+        $form->fillForm(['status' => 'confirmed'])
+            ->assertFormFieldHidden('photo');
+
+        // Preparing is the step the buyer cannot see for themselves.
+        $form->fillForm(['status' => 'processing'])
+            ->assertFormFieldVisible('photo');
+
+        $form->fillForm(['status' => 'out_for_delivery'])
+            ->assertFormFieldHidden('photo');
+    }
+
+    public function test_a_photo_does_not_ride_along_on_another_step(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat('Switched Goat')->id]);
+
+        Storage::fake('public');
+        $this->actingAs(User::where('role', 'admin')->firstOrFail());
+
+        // A photo picked while Preparing was selected, then the status changed
+        // away before submitting. The field is hidden by then, but the value
+        // can still be sitting in the form state.
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order, data: [
+                'status' => 'confirmed',
+                'photo'  => UploadedFile::fake()->image('stray.jpg'),
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $entry = $order->fresh()->statusHistories()
+            ->where('to_status', 'confirmed')->latest('id')->firstOrFail();
+
+        $this->assertNull($entry->photo);
+    }
+
+    public function test_a_status_change_with_nothing_attached_leaves_no_photo(): void
+    {
+        $order = $this->orderFor([$this->sellerGoat('Quiet Goat')->id]);
+
+        $this->actingAs(User::where('role', 'admin')->firstOrFail());
+
+        Livewire::test(ListOrders::class)
+            ->callTableAction('updateStatus', $order, data: ['status' => 'confirmed'])
+            ->assertHasNoTableActionErrors();
+
+        $entry = $order->fresh()->statusHistories()
+            ->where('to_status', 'confirmed')->latest('id')->firstOrFail();
+
+        // The buyer's page hides rows with nothing on them, so a blank note and
+        // photo have to stay blank rather than becoming empty strings.
+        $this->assertNull($entry->photo);
+        $this->assertNull($entry->note);
     }
 
     private function buyerSees(Order $order): array

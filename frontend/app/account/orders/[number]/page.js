@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import OrderPayment from '@/components/account/OrderPayment';
 import OrderRefund from '@/components/account/OrderRefund';
-import OrderTimeline from '@/components/account/OrderTimeline';
+import OrderTimeline, { BUYER_STATUS_LABELS } from '@/components/account/OrderTimeline';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
@@ -119,6 +119,17 @@ export default function OrderDetailPage() {
       : '',
   ];
 
+  // Steps staff actually wrote something or attached a photo to. A bare status
+  // change is already drawn by the timeline, so an empty row would add a line
+  // to the page and nothing to what the buyer knows.
+  //
+  // `pending` is dropped with it: the observer writes an "Order placed" row the
+  // moment an order exists, which is not staff telling the buyer anything --
+  // the timeline above already says Placed, with the same timestamp.
+  const updates = (order.history || [])
+    .filter((entry) => entry.status !== 'pending')
+    .filter((entry) => entry.note || entry.photo);
+
   return (
     <div className="d-grid gap-4">
       <ConfirmDialog
@@ -198,6 +209,48 @@ export default function OrderDetailPage() {
           formatWhen={formatDateTime}
         />
 
+        {/* What staff wrote and photographed as the order moved.
+            The timeline above says which step the order is on; this says what
+            actually happened at each one. It matters most at Preparing: the
+            listing photo was taken before the buyer ordered, and on a listing
+            sold by weight it may not even be the animal they are getting. */}
+        {updates.length > 0 && (
+          <div className="mt-3 pt-3 border-top">
+            {/* Where the order is right now, in the timeline's own words. This
+                heading follows the status: move the order on and it changes
+                with it, rather than naming whichever step was written last. */}
+            <div className="fw-semibold text-ink mb-2">
+              {BUYER_STATUS_LABELS[order.status] || order.status_label}
+            </div>
+
+            <div className="d-grid gap-3">
+            {updates.map((entry, index) => (
+              <div key={`${entry.status}-${entry.created_at}-${index}`}>
+                {entry.note && <div className="small text-ink">{entry.note}</div>}
+
+                {/* Big enough to actually see the animal. This is the only
+                    picture of the goat the buyer is really getting, so a
+                    thumbnail defeats the point of taking it. */}
+                {entry.photo && (
+                  <a
+                    href={entry.photo}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="gallery__thumb d-block mt-2"
+                    style={{ width: '100%', maxWidth: 420, aspectRatio: '4 / 3' }}
+                  >
+                    <img
+                      src={entry.photo}
+                      alt={`Your goat at the ${BUYER_STATUS_LABELS[entry.status] || entry.label} step`}
+                    />
+                  </a>
+                )}
+              </div>
+            ))}
+            </div>
+          </div>
+        )}
+
         {/* Nobody knows better than the buyer whether the goat is standing in
             their yard, so let them say so instead of waiting on a phone call
             being relayed to staff. */}
@@ -238,7 +291,49 @@ export default function OrderDetailPage() {
                 ? <Link href={`/goats/${item.slug}`} className="fw-semibold text-body">{item.name}</Link>
                 : <span className="fw-semibold">{item.name}</span>}
 
-              <div className="small text-soft">{item.sku} · Qty {item.quantity}</div>
+              <div className="small text-soft">
+                {item.sku}
+                {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
+                {` · Qty ${item.quantity}`}
+              </div>
+
+              {/* A live animal does not arrive at the weight it left at: it
+                  sheds gut fill and water on the road, and the scale at the
+                  far end is not the one it was weighed on. Both figures are
+                  shown, because hiding the second one is what makes a buyer
+                  think they were shortchanged. */}
+              {item.delivered_weight_kg != null && (
+                <div className="small mt-1">
+                  {item.weight_direction === 'same' ? (
+                    <span className="text-brand">
+                      <i className="bi bi-check-circle me-1" aria-hidden="true" />
+                      Weighed {item.delivered_weight_kg} kg at delivery — as ordered.
+                    </span>
+                  ) : (
+                    <span className="text-soft">
+                      <i className="bi bi-speedometer2 me-1" aria-hidden="true" />
+                      Ordered {item.weight_kg} kg · weighed{' '}
+                      <strong>{item.delivered_weight_kg} kg</strong> at delivery
+                      {item.weight_direction === 'increased' ? ' (heavier)' : ' (lighter)'}.
+                      {/* The money follows the scale, so say so on the same
+                          line. A changed total with no explanation beside it
+                          is the thing that generates the phone call. */}
+                      {item.price_adjustment != null && item.price_adjustment !== 0 && (
+                        <>
+                          {' '}
+                          <span className={item.price_adjustment < 0 ? 'text-brand' : 'text-warning'}>
+                            {item.price_adjustment < 0 ? '−' : '+'}
+                            {formatMoney(Math.abs(item.price_adjustment), settings)}
+                            {item.price_adjustment < 0 ? ' off' : ' added'}
+                          </span>
+                          {' — you pay '}
+                          <strong>{formatMoney(item.charged_total, settings)}</strong>.
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {item.supplied_by && (
                 <div className="small text-soft">
@@ -297,6 +392,20 @@ export default function OrderDetailPage() {
 
               <dt className="col-7 fw-normal text-soft">Subtotal</dt>
               <dd className="col-5 text-end">{formatMoney(order.totals.subtotal, settings)}</dd>
+
+              {/* Sits directly under the subtotal it corrects, so the total
+                  below is arithmetic the buyer can follow line by line. */}
+              {order.totals.weight_adjustment != null && order.totals.weight_adjustment !== 0 && (
+                <>
+                  <dt className="col-7 fw-normal text-soft">
+                    Weight at delivery
+                  </dt>
+                  <dd className={`col-5 text-end ${order.totals.weight_adjustment < 0 ? 'text-success' : 'text-warning'}`}>
+                    {order.totals.weight_adjustment < 0 ? '−' : '+'}
+                    {formatMoney(Math.abs(order.totals.weight_adjustment), settings)}
+                  </dd>
+                </>
+              )}
 
               {order.totals.discount > 0 && (
                 <>

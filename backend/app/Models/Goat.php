@@ -47,6 +47,10 @@ class Goat extends Model
     protected static function booted(): void
     {
         static::saving(function (self $goat) {
+            // Done before the slug is built, so a new listing's URL does not
+            // carry a weight either.
+            $goat->name = self::withoutTrailingWeight($goat->name);
+
             if (blank($goat->slug)) {
                 $goat->slug = Str::slug($goat->name).'-'.Str::lower(Str::random(4));
             }
@@ -63,6 +67,38 @@ class Goat extends Model
                 ? round((float) $goat->effective_price / $base, 2)
                 : null;
         });
+    }
+
+    /**
+     * A listing name with any trailing weight taken off it.
+     *
+     * The weight is a field of its own, shown on the card, the detail page and
+     * every line of the order. Repeating it in the name was harmless while a
+     * listing meant one animal at one weight -- and became wrong the moment a
+     * listing could be bought at 30 kg while still calling itself "- 41kg".
+     * That name travels: it is snapshotted onto the order line and is what the
+     * seller reads when deciding which animal to bring.
+     *
+     * Only a trailing weight is removed. "Barbari Buck - 18kg" becomes
+     * "Barbari Buck", while a name that is nothing but a weight is left alone
+     * rather than emptied.
+     */
+    public static function withoutTrailingWeight(?string $name): ?string
+    {
+        if ($name === null) {
+            return null;
+        }
+
+        // Any dash the shop might use, including the em dash the seed data has.
+        $cleaned = preg_replace(
+            '/\s*[-\x{2010}-\x{2015}]?\s*\d+(?:[.,]\d+)?\s*kgs?\.?\s*$/iu',
+            '',
+            $name
+        );
+
+        $cleaned = trim((string) $cleaned);
+
+        return $cleaned !== '' ? $cleaned : trim($name);
     }
 
     public function category(): BelongsTo

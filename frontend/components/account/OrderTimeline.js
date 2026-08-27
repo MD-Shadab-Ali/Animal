@@ -1,11 +1,31 @@
 'use client';
 
+/**
+ * What each status is called when a buyer reads it.
+ *
+ * Deliberately not the wording the API sends: `Order::STATUSES` is the
+ * operational vocabulary staff work in ("Processing", "Out for delivery"),
+ * and the buyer is told "Preparing" and "On the way". Exported so anything
+ * else showing a status to a buyer says the same word this timeline does --
+ * the update list underneath was reading the API label and saying
+ * "Processing" directly below a step marked "Preparing".
+ */
+export const BUYER_STATUS_LABELS = {
+  pending: 'Placed',
+  confirmed: 'Confirmed',
+  processing: 'Preparing',
+  out_for_delivery: 'On the way',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+};
+
+// The progression, in order. Cancelled is a status but not a step.
 const STEPS = [
-  ['pending', 'Placed'],
-  ['confirmed', 'Confirmed'],
-  ['processing', 'Preparing'],
-  ['out_for_delivery', 'On the way'],
-  ['delivered', 'Delivered'],
+  ['pending', BUYER_STATUS_LABELS.pending],
+  ['confirmed', BUYER_STATUS_LABELS.confirmed],
+  ['processing', BUYER_STATUS_LABELS.processing],
+  ['out_for_delivery', BUYER_STATUS_LABELS.out_for_delivery],
+  ['delivered', BUYER_STATUS_LABELS.delivered],
 ];
 
 export default function OrderTimeline({

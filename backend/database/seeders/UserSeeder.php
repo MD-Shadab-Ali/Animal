@@ -14,6 +14,7 @@ class UserSeeder extends Seeder
             ['email' => 'admin@goathaven.test'],
             [
                 'name'      => 'Farm Admin',
+                'email_verified_at' => now(),
                 'role'      => 'admin',
                 'phone'     => '+977 9800-000000',
                 'password'  => 'password',
@@ -25,6 +26,7 @@ class UserSeeder extends Seeder
             ['email' => 'customer@example.test'],
             [
                 'name'      => 'Rahim Uddin',
+                'email_verified_at' => now(),
                 'role'      => 'customer',
                 'phone'     => '+977 9801-111111',
                 'password'  => 'password',

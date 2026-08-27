@@ -14,6 +14,8 @@ class OrderStatusHistoryResource extends JsonResource
             'status'     => $this->to_status,
             'label'      => Order::STATUSES[$this->to_status] ?? $this->to_status,
             'note'       => $this->note,
+            // Whatever staff photographed when they moved the order.
+            'photo'      => $this->photo_url,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

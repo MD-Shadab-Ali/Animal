@@ -115,7 +115,10 @@ class PaymentService
     }
 
     /**
-     * A buyer asking for their money back on a cancelled order.
+     * A buyer asking for money the order no longer needs.
+     *
+     * Either the order was cancelled, or it came in lighter than ordered and
+     * re-priced below what was already paid.
      *
      * Filed as a refund row sitting at `pending`: nothing leaves the ledger
      * until staff have actually sent the money and said so, exactly as a
@@ -123,11 +126,11 @@ class PaymentService
      */
     public function requestRefund(Order $order, User $payer, array $data): Payment
     {
+        // Two ways an order can owe money back: it was cancelled, or it was
+        // re-priced downwards at the door after the buyer had already paid.
         if (! $order->isRefundable()) {
             throw ValidationException::withMessages([
-                'refund' => [$order->status === 'cancelled'
-                    ? 'There is nothing left to refund on this order.'
-                    : 'Only a cancelled order can be refunded. Cancel it first, or talk to us.'],
+                'refund' => ['There is nothing to refund on this order.'],
             ]);
         }
 
@@ -176,7 +179,7 @@ class PaymentService
 
         $order = $payment->order->fresh();
 
-        $this->sync($order);
+        $this->sync($order, $payment);
 
         $payment = $payment->fresh();
 
@@ -197,7 +200,7 @@ class PaymentService
             'confirmed_by' => $by?->id,
         ]);
 
-        $this->sync($payment->order->fresh());
+        $this->sync($payment->order->fresh(), $payment);
 
         return $payment->fresh();
     }
@@ -206,7 +209,10 @@ class PaymentService
      * Re-derive the order's money columns from the ledger, then close the order
      * if the last thing it was waiting for was the money.
      */
-    public function sync(Order $order): Order
+    /**
+     * @param  Payment|null  $trigger  the payment that prompted this, when there was one
+     */
+    public function sync(Order $order, ?Payment $trigger = null): Order
     {
         $paid = round((float) Payment::query()
             ->where('order_id', $order->id)
@@ -232,7 +238,7 @@ class PaymentService
             },
         ])->save();
 
-        return $this->advanceOnPayment($order->fresh());
+        return $this->advanceOnPayment($order->fresh(), $trigger);
     }
 
     /**
@@ -242,8 +248,15 @@ class PaymentService
      * same act as confirming the order — so they should not then have to go and
      * say it a second time in a different dropdown.
      */
-    private function advanceOnPayment(Order $order): Order
+    private function advanceOnPayment(Order $order, ?Payment $trigger = null): Order
     {
+        // A refund is money leaving. Confirming one used to make the order look
+        // settled -- paid had just come down to meet the total -- and closed it
+        // as delivered on the strength of a payment going the other way.
+        if ($trigger?->isRefund()) {
+            return $order;
+        }
+
         // What the buyer promised up front is in, so the order is no longer
         // merely placed: it is committed, and the goat can be prepared. Only
         // from 'pending' — anything further along has already been moved by
@@ -261,15 +274,26 @@ class PaymentService
     }
 
     /**
-     * Money was the only thing left, so stop asking staff to click Delivered.
+     * Money handed over at the door is evidence the goat got there.
      *
-     * Only from `out_for_delivery`: paying for a goat still on the farm does
-     * not deliver it, and marking it delivered would release the seller's
-     * earnings for an animal the buyer has not seen.
+     * Only when the money was actually due at the door. An order paid in full
+     * up front settled long before the animal moved, so its balance says
+     * nothing about whether anything arrived -- a person has to say that, and
+     * the buyer has a button for it. Closing those on payment released the
+     * seller's earnings for a goat nobody had seen.
+     *
+     * Only from `out_for_delivery`, for the same reason: paying for a goat
+     * still standing on the farm does not deliver it.
      */
     private function closeIfSettled(Order $order): Order
     {
         if (! Setting::get('auto_deliver_on_payment', true)) {
+            return $order;
+        }
+
+        // Cash on delivery is collected at the handover, and the last slice of
+        // an advance is too. Anything else was paid before the journey began.
+        if (! in_array($order->payment_plan, ['on_delivery', 'advance'], true)) {
             return $order;
         }
 

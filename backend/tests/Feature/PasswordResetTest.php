@@ -3,7 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Notifications\ResetPasswordNotification;
+use App\Models\EmailOtp;
+use App\Notifications\EmailOtpNotification;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -20,7 +21,22 @@ class PasswordResetTest extends TestCase
         $this->seed(DatabaseSeeder::class);
     }
 
-    public function test_a_reset_link_is_emailed_and_points_at_the_storefront(): void
+    /** Pulls the code out of the email the way a person reads it off theirs. */
+    private function codeFor(User $customer): string
+    {
+        $code = null;
+
+        Notification::assertSentOnDemand(EmailOtpNotification::class,
+            function (EmailOtpNotification $notification) use (&$code) {
+                $code = $notification->code;
+
+                return $notification->purpose === EmailOtp::PURPOSE_PASSWORD_RESET;
+            });
+
+        return $code;
+    }
+
+    public function test_a_reset_code_is_emailed(): void
     {
         Notification::fake();
 
@@ -29,15 +45,12 @@ class PasswordResetTest extends TestCase
         $this->postJson('/api/v1/auth/forgot-password', ['email' => $customer->email])
             ->assertOk();
 
-        Notification::assertSentTo($customer, ResetPasswordNotification::class,
-            function (ResetPasswordNotification $notification) use ($customer) {
-                $mail = $notification->toMail($customer);
-                $url = $mail->actionUrl;
+        // A code rather than a link: nothing to click, so nothing for a
+        // phishing mail to imitate, and it cannot be spent by anyone who
+        // merely saw the message go past.
+        $code = $this->codeFor($customer);
 
-                return str_starts_with($url, config('app.frontend_url').'/reset-password')
-                    && str_contains($url, 'token=')
-                    && str_contains($url, urlencode($customer->email));
-            });
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $code);
     }
 
     public function test_an_unknown_email_does_not_reveal_whether_the_account_exists(): void
@@ -46,20 +59,23 @@ class PasswordResetTest extends TestCase
 
         $this->postJson('/api/v1/auth/forgot-password', ['email' => 'nobody@example.test'])
             ->assertOk()
-            ->assertJsonPath('message', 'If that email belongs to an account, a reset link is on its way.');
+            ->assertJsonPath('message', 'If that email belongs to an account, a reset code is on its way.');
 
         Notification::assertNothingSent();
     }
 
     public function test_a_customer_can_reset_their_password_and_old_tokens_die(): void
     {
+        Notification::fake();
+
         $customer = User::where('role', 'customer')->firstOrFail();
         $oldToken = $customer->createToken('storefront')->plainTextToken;
 
-        $token = \Illuminate\Support\Facades\Password::createToken($customer);
+        $this->postJson('/api/v1/auth/forgot-password', ['email' => $customer->email])
+            ->assertOk();
 
         $this->postJson('/api/v1/auth/reset-password', [
-            'token'                 => $token,
+            'code'                  => $this->codeFor($customer),
             'email'                 => $customer->email,
             'password'              => 'a-brand-new-password',
             'password_confirmation' => 'a-brand-new-password',
@@ -82,15 +98,23 @@ class PasswordResetTest extends TestCase
         ])->assertOk();
     }
 
-    public function test_an_invalid_token_is_rejected(): void
+    public function test_a_wrong_code_is_rejected(): void
     {
+        Notification::fake();
+
         $customer = User::where('role', 'customer')->firstOrFail();
 
+        $this->postJson('/api/v1/auth/forgot-password', ['email' => $customer->email])
+            ->assertOk();
+
         $this->postJson('/api/v1/auth/reset-password', [
-            'token'                 => 'not-a-real-token',
+            'code'                  => '000000',
             'email'                 => $customer->email,
             'password'              => 'another-password',
             'password_confirmation' => 'another-password',
-        ])->assertStatus(422)->assertJsonValidationErrors('email');
+        ])->assertStatus(422)->assertJsonValidationErrors('code');
+
+        // And the password is untouched by a failed attempt.
+        $this->assertFalse(Hash::check('another-password', $customer->fresh()->password));
     }
 }

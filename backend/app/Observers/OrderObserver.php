@@ -68,9 +68,12 @@ class OrderObserver
             // Whoever moved it may have said why; for a delivery confirmed by
             // the customer that distinction matters later.
             'note'        => $order->statusNote,
+            // Evidence of the actual animal at this point in the order.
+            'photo'       => $order->statusPhoto,
         ]);
 
         $order->statusNote = null;
+        $order->statusPhoto = null;
 
         // A cancelled order releases its goats back into the shop, and no seller
         // should be left with a line still asking them to prepare an animal.

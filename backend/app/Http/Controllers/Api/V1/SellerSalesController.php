@@ -70,6 +70,10 @@ class SellerSalesController extends Controller
                 'id'         => $item->id,
                 'name'       => $item->goat_name,
                 'sku'        => $item->goat_sku,
+                // What the buyer actually ordered. A listing sold across a
+                // range carries its own weight in the name, so the seller has
+                // to be told which one this line is.
+                'weight_kg'  => $item->weight_kg !== null ? (float) $item->weight_kg : null,
                 'thumbnail'  => $item->thumbnail_url,
                 'quantity'   => $item->quantity,
                 'unit_price' => (float) $item->unit_price,

@@ -8,7 +8,11 @@ import { apiFetch } from '@/lib/api';
 import { formatDateTime, formatMoney } from '@/lib/format';
 
 /**
- * Getting your money back on a cancelled order.
+ * Getting your money back.
+ *
+ * Two ways an order ends up owing: it was cancelled, or the goat weighed less
+ * than ordered and re-priced below what had already been paid. The second one
+ * is not a cancellation and must not be described as one.
  *
  * Where the money goes is asked for rather than assumed: a wallet payment may
  * need returning to a bank, and only the buyer knows.
@@ -134,8 +138,10 @@ export default function OrderRefund({ order, onRequested }) {
         <h2 className="h6 mb-2">Your refund</h2>
         <p className="text-soft small mb-0">
           <i className="bi bi-telephone me-1" aria-hidden="true" />
-          You paid {formatMoney(refund.amount, settings)} before this order was cancelled. We
-          will call you to arrange sending it back.
+          {refund.reason === 'overpaid'
+            ? `Your goat weighed less than ordered, so ${formatMoney(refund.amount, settings)} of what you paid is yours to have back.`
+            : `You paid ${formatMoney(refund.amount, settings)} before this order was cancelled.`}
+          {' '}We will call you to arrange sending it back.
         </p>
       </div>
     );
@@ -148,8 +154,10 @@ export default function OrderRefund({ order, onRequested }) {
         <span className="fw-bold text-brand">{formatMoney(refund.amount, settings)} to refund</span>
       </div>
       <p className="text-soft small mb-4">
-        You paid {formatMoney(refund.amount, settings)} before this order was cancelled. Tell us
-        where to send it and we will return it.
+        {refund.reason === 'overpaid'
+          ? `Your goat weighed less than ordered, so the price came down and ${formatMoney(refund.amount, settings)} of what you paid is yours to have back.`
+          : `You paid ${formatMoney(refund.amount, settings)} before this order was cancelled.`}
+        {' '}Tell us where to send it and we will return it.
       </p>
 
       <form onSubmit={submit} className="row g-3">
@@ -226,14 +234,21 @@ export default function OrderRefund({ order, onRequested }) {
         </div>
 
         <div className="col-12">
-          <label className="form-label" htmlFor="refund_reason">Why did you cancel?</label>
+          {/* Nothing was cancelled when the refund is an overpayment — the
+              reason is already known, so the field asks for anything else
+              rather than for an explanation the buyer does not owe. */}
+          <label className="form-label" htmlFor="refund_reason">
+            {refund.reason === 'overpaid' ? 'Anything you want to add?' : 'Why did you cancel?'}
+          </label>
           <textarea
             id="refund_reason"
             rows={2}
             className="form-control"
             value={form.refund_reason}
             onChange={set('refund_reason')}
-            placeholder="Optional, but it helps us do better"
+            placeholder={refund.reason === 'overpaid'
+              ? 'Optional — anything we should know about sending this back'
+              : 'Optional, but it helps us do better'}
           />
         </div>
 

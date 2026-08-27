@@ -52,11 +52,31 @@ export function AuthProvider({ children }) {
     return response.data.user;
   }, [persist]);
 
+  /**
+   * Signing up no longer signs you in.
+   *
+   * The account is created unverified and carries no token: the address has to
+   * be proved first, or a made-up one would be as good as a real one. The
+   * token arrives from verifyEmail() instead.
+   */
   const register = useCallback(async (payload) => {
     const response = await apiFetch('/auth/register', { method: 'POST', body: payload });
+    return response.data;
+  }, []);
+
+  const verifyEmail = useCallback(async (email, code) => {
+    const response = await apiFetch('/auth/verify-email', {
+      method: 'POST',
+      body: { email, code },
+    });
+
     persist(response.data.token, response.data.user);
     return response.data.user;
   }, [persist]);
+
+  const resendVerification = useCallback((email) =>
+    apiFetch('/auth/resend-verification', { method: 'POST', body: { email } }),
+  []);
 
   const logout = useCallback(async () => {
     try {
@@ -78,8 +98,8 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const value = useMemo(
-    () => ({ user, token, loading, isAuthenticated: Boolean(token && user), login, register, logout, refreshUser }),
-    [user, token, loading, login, register, logout, refreshUser]
+    () => ({ user, token, loading, isAuthenticated: Boolean(token && user), login, register, verifyEmail, resendVerification, logout, refreshUser }),
+    [user, token, loading, login, register, verifyEmail, resendVerification, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

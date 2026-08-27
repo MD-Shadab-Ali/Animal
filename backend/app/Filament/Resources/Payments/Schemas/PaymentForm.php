@@ -134,7 +134,14 @@ class PaymentForm
                                 .$record->order->items->map(fn (OrderItem $item) => '<li>'
                                     .e($item->goat_name)
                                     .' &times; '.$item->quantity
-                                    .' &mdash; '.e(Setting::currencySymbol().number_format((float) $item->line_total, 2))
+                                    // What was charged, not what was ordered:
+                                    // these lines sit under the order total and
+                                    // have to be the same money as it is.
+                                    .' &mdash; '.e($money($item->charged_line_total))
+                                    .(abs((float) $item->price_adjustment) >= 0.005
+                                        ? ' <em>(weighed '.e(rtrim(rtrim((string) $item->delivered_weight_kg, '0'), '.'))
+                                            .' kg &mdash; ordered at '.e($money((float) $item->line_total)).')</em>'
+                                        : '')
                                     .($item->seller_name ? ' <em>(from '.e($item->seller_name).')</em>' : '')
                                     .'</li>')->implode('')
                                 .'</ul>'

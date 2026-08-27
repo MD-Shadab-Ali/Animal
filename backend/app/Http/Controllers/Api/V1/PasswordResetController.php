@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmailOtp;
 use App\Models\User;
+use App\Services\OtpService;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
@@ -15,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 class PasswordResetController extends Controller
 {
     /**
-     * Email a reset link.
+     * Email a reset code.
      *
      * The response is deliberately identical whether or not the address exists,
      * so this endpoint cannot be used to discover who has an account.
@@ -26,48 +27,50 @@ class PasswordResetController extends Controller
             'email' => ['required', 'email', 'max:255'],
         ]);
 
-        $status = Password::sendResetLink($data);
-
-        if ($status === Password::RESET_THROTTLED) {
-            throw ValidationException::withMessages([
-                'email' => ['Please wait a moment before asking for another link.'],
-            ]);
+        // Only issued for an address that actually has an account, but the
+        // answer below never says so either way.
+        if (User::where('email', $data['email'])->exists()) {
+            app(OtpService::class)->issue($data['email'], EmailOtp::PURPOSE_PASSWORD_RESET);
         }
 
         return response()->json([
-            'message' => 'If that email belongs to an account, a reset link is on its way.',
+            'message' => 'If that email belongs to an account, a reset code is on its way.',
         ]);
     }
 
     public function reset(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'token'    => ['required', 'string'],
             'email'    => ['required', 'email'],
+            'code'     => ['required', 'string'],
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
         ]);
 
-        $status = Password::reset($data, function (User $user, string $password) {
-            $user->forceFill([
-                'password'       => $password,
-                'remember_token' => Str::random(60),
-            ])->save();
+        $otps = app(OtpService::class);
 
-            // A reset invalidates every existing API token.
-            $user->tokens()->delete();
+        // Checked before the account is looked up so a wrong code and an
+        // unknown address fail identically.
+        $otps->verify($data['email'], EmailOtp::PURPOSE_PASSWORD_RESET, $data['code']);
 
-            event(new PasswordReset($user));
-        });
+        $user = User::where('email', $data['email'])->firstOrFail();
 
-        if ($status !== Password::PASSWORD_RESET) {
-            throw ValidationException::withMessages([
-                'email' => [match ($status) {
-                    Password::INVALID_TOKEN => 'This reset link has expired or has already been used.',
-                    Password::INVALID_USER  => 'We could not find an account for that email.',
-                    default                 => 'We could not reset your password. Please request a new link.',
-                }],
-            ]);
+        $user->forceFill([
+            'password'       => $data['password'],
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        // A reset invalidates every existing API token.
+        $user->tokens()->delete();
+
+        // Someone who can read this address has now proved it, which is the
+        // same thing signup asks for.
+        if ($user->email_verified_at === null) {
+            $user->forceFill(['email_verified_at' => now()])->save();
         }
+
+        $otps->forget($user->email, EmailOtp::PURPOSE_PASSWORD_RESET);
+
+        event(new PasswordReset($user));
 
         return response()->json([
             'message' => 'Your password has been reset. You can sign in now.',

@@ -30,6 +30,17 @@ class OrderItemResource extends JsonResource
             // What was agreed at the time, not what the listing says now.
             'weight_kg'    => $this->weight_kg !== null ? (float) $this->weight_kg : null,
             'price_per_kg' => $this->price_per_kg !== null ? (float) $this->price_per_kg : null,
+            // What the scale said on arrival, and which way it moved. A live
+            // animal loses gut fill and water on the road, so this rarely
+            // matches to the gram and the buyer should see both figures.
+            'delivered_weight_kg' => $this->delivered_weight_kg !== null
+                ? (float) $this->delivered_weight_kg
+                : null,
+            'weight_direction' => $this->weight_direction,
+            // Signed: negative when the goat came in lighter and money came
+            // off. The agreed line total stays above it, untouched.
+            'price_adjustment' => (float) $this->price_adjustment,
+            'charged_total'    => $this->charged_line_total,
             'unit_price' => (float) $this->unit_price,
             'quantity'   => $this->quantity,
             'line_total' => (float) $this->line_total,

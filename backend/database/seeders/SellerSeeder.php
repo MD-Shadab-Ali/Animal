@@ -44,13 +44,13 @@ class SellerSeeder extends Seeder
         // the seller dashboard have something to show.
         $listings = [
             [
-                'name' => 'Karim Khari Khasi — 24kg', 'breed' => 'Khari',
+                'name' => 'Karim Khari Khasi', 'breed' => 'Khari',
                 'category' => 'Dashain Goats', 'age' => 15, 'weight' => 24, 'gender' => 'male',
                 'price' => 31000, 'approval' => 'approved', 'status' => 'published',
                 'short' => 'Raised entirely on green fodder, calm to handle.',
             ],
             [
-                'name' => 'Karim Jamunapari Doe — 36kg', 'breed' => 'Jamunapari',
+                'name' => 'Karim Jamunapari Doe', 'breed' => 'Jamunapari',
                 'category' => 'Dairy Goats', 'age' => 26, 'weight' => 36, 'gender' => 'female',
                 'price' => 58000, 'approval' => 'pending', 'status' => 'published',
                 'short' => 'Second lactation, steady yield.',
@@ -66,7 +66,8 @@ class SellerSeeder extends Seeder
                     'seller_id'       => $seller->id,
                     'category_id'     => $category->id,
                     'name'            => $row['name'],
-                    'slug'            => Str::slug($row['name']),
+                    // Unique even when two listings share a name.
+                    'slug'            => Str::slug($row['name'].' '.$row['weight'].'kg'),
                     'breed'           => $row['breed'],
                     'age_months'      => $row['age'],
                     'weight_kg'       => $row['weight'],

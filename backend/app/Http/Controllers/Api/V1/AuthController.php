@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmailOtp;
 use App\Models\User;
+use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +23,9 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
 
+        // Created unverified and handed no token: the account exists so the
+        // email is taken and the details are kept, but it cannot be used until
+        // someone proves they can read mail sent to that address.
         $user = User::create([
             'name'     => $data['name'],
             'email'    => $data['email'],
@@ -29,6 +34,41 @@ class AuthController extends Controller
             'role'     => 'customer',
         ]);
 
+        app(OtpService::class)->issue($user->email, EmailOtp::PURPOSE_REGISTER);
+
+        return response()->json([
+            'message' => 'We sent a code to '.$user->email.'. Enter it to finish signing up.',
+            'data'    => ['email' => $user->email, 'verification_required' => true],
+        ], 201);
+    }
+
+    /**
+     * Finishing a signup with the code that was emailed.
+     *
+     * The token is issued here rather than at registration, so an account
+     * cannot be used by whoever typed the address -- only by whoever can read
+     * mail sent to it.
+     */
+    public function verifyEmail(Request $request, OtpService $otps): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'code'  => ['required', 'string'],
+        ]);
+
+        $user = User::where('email', $data['email'])->firstOrFail();
+
+        if ($user->email_verified_at !== null) {
+            throw ValidationException::withMessages([
+                'email' => ['This email is already verified. You can sign in.'],
+            ]);
+        }
+
+        $otps->verify($user->email, EmailOtp::PURPOSE_REGISTER, $data['code']);
+
+        $user->forceFill(['email_verified_at' => now(), 'last_login_at' => now()])->save();
+        $otps->forget($user->email, EmailOtp::PURPOSE_REGISTER);
+
         return response()->json([
             'message' => 'Welcome aboard.',
             'data'    => [
@@ -36,6 +76,26 @@ class AuthController extends Controller
                 'token' => $user->createToken('storefront')->plainTextToken,
             ],
         ], 201);
+    }
+
+    /** Another code, for a first one that never arrived. */
+    public function resendVerification(Request $request, OtpService $otps): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::where('email', $data['email'])->first();
+
+        // Answered the same way whether or not the account exists or is
+        // already verified, so this cannot be used to find out either.
+        if ($user && $user->email_verified_at === null) {
+            $otps->issue($user->email, EmailOtp::PURPOSE_REGISTER);
+        }
+
+        return response()->json([
+            'message' => 'If that account is waiting to be verified, a new code is on its way.',
+        ]);
     }
 
     public function login(Request $request): JsonResponse
@@ -56,6 +116,15 @@ class AuthController extends Controller
         if (! $user->is_active) {
             throw ValidationException::withMessages([
                 'email' => ['This account has been disabled. Please contact us.'],
+            ]);
+        }
+
+        // Signing up is not finished until the address is proved, or a made-up
+        // address would be as good as a real one.
+        if ($user->email_verified_at === null) {
+            throw ValidationException::withMessages([
+                'email' => ['Please verify your email first. We can send you a new code.'],
+                'verification_required' => [true],
             ]);
         }
 

@@ -190,9 +190,21 @@ class GoatForm
                                 $low  = $anchor - floor(($anchor - min($floor, $anchor)) / $step + 0.000001) * $step;
                                 $high = $anchor + floor((max($top, $anchor) - $anchor) / $step + 0.000001) * $step;
 
-                                return 'Buyers will choose between '.round($low, 2).' kg and '
+                                $line = 'Buyers will choose between '.round($low, 2).' kg and '
                                     .round($high, 2).' kg, in '.round($step, 2).' kg steps, '
                                     .'counted out from the listed '.round($anchor, 2).' kg.';
+
+                                // A weight in the name is fine on a listing sold
+                                // at one weight. On a range it contradicts every
+                                // buyer who picks anything else, and it follows
+                                // the order all the way to the seller's screen.
+                                if (preg_match('/\d+\s*kg/i', (string) $get('name'))) {
+                                    $line .= ' Note: a weight at the end of the name is removed '
+                                        .'on save — the weight field is what buyers see, and a '
+                                        .'name saying otherwise would argue with their order.';
+                                }
+
+                                return $line;
                             }),
 
                         TextInput::make('weight_step_kg')

@@ -64,6 +64,58 @@ class ItemsRelationManager extends RelationManager
                     ->placeholder('House stock')
                     ->color(fn ($state) => $state ? null : 'gray'),
 
+                TextColumn::make('weight_kg')
+                    ->label('Weight')
+                    // Blank on a listing sold at one weight, where the name
+                    // already says which animal it is.
+                    ->formatStateUsing(fn (?string $state) => $state !== null
+                        ? rtrim(rtrim($state, '0'), '.').' kg'
+                        : '—'),
+
+                TextColumn::make('delivered_weight_kg')
+                    ->label('At delivery')
+                    ->placeholder('Not weighed')
+                    ->badge()
+                    ->color(fn (OrderItem $record) => match ($record->weight_direction) {
+                        'increased' => 'info',
+                        'decreased' => 'warning',
+                        'same'      => 'success',
+                        default     => 'gray',
+                    })
+                    ->formatStateUsing(function ($state, OrderItem $record) {
+                        $kg = rtrim(rtrim((string) $state, '0'), '.').' kg';
+                        $delta = $record->weight_delta;
+
+                        if ($delta === null || abs($delta) < 0.005) {
+                            return $kg.' — as ordered';
+                        }
+
+                        return $kg.' — '.($delta > 0 ? '+' : '').$delta.' kg';
+                    })
+                    ->description(fn (OrderItem $record) => $record->weighed_at
+                        ? 'Weighed '.$record->weighed_at->diffForHumans()
+                        : null),
+
+                TextColumn::make('price_adjustment')
+                    ->label('Weight adjustment')
+                    ->placeholder('—')
+                    ->color(fn ($state) => (float) $state < 0 ? 'success' : ((float) $state > 0 ? 'warning' : 'gray'))
+                    ->formatStateUsing(function ($state, OrderItem $record) {
+                        $delta = (float) $state;
+
+                        if (abs($delta) < 0.005) {
+                            return '—';
+                        }
+
+                        $symbol = \App\Models\Setting::currencySymbol();
+
+                        return ($delta < 0 ? '-' : '+').$symbol.number_format(abs($delta), 2);
+                    })
+                    ->description(fn (OrderItem $record) => abs((float) $record->price_adjustment) >= 0.005
+                        ? 'Charged '.\App\Models\Setting::currencySymbol()
+                            .number_format($record->charged_line_total, 2)
+                        : null),
+
                 TextColumn::make('fulfilment_status')
                     ->label('Supplier progress')
                     ->badge()

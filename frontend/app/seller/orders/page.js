@@ -91,7 +91,13 @@ export default function SellerOrdersPage() {
 
                   <div className="flex-grow-1" style={{ minWidth: 160 }}>
                     <div className="fw-semibold text-ink small">{item.name}</div>
-                    <div className="small text-soft">{item.sku} · Qty {item.quantity}</div>
+                    <div className="small text-soft">
+                      {item.sku}
+                      {/* Which weight to prepare — the listing's name cannot
+                          say, because it is sold across a range. */}
+                      {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
+                      {` · Qty ${item.quantity}`}
+                    </div>
                   </div>
 
                   <div className="text-end small">

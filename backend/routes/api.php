@@ -62,6 +62,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('auth/register', [AuthController::class, 'register'])->name('auth.register');
         Route::post('auth/login', [AuthController::class, 'login'])->name('auth.login');
         Route::post('auth/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('auth.forgot');
+
+        // Finishing a signup, and asking again when the first code went astray.
+        // Throttled with the rest of auth: these send mail on demand.
+        Route::post('auth/verify-email', [AuthController::class, 'verifyEmail'])->name('auth.verify');
+        Route::post('auth/resend-verification', [AuthController::class, 'resendVerification'])
+            ->name('auth.resend');
         Route::post('auth/reset-password', [PasswordResetController::class, 'reset'])->name('auth.reset');
     });
 

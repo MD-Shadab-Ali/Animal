@@ -7,7 +7,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderStatusHistory extends Model
 {
-    protected $fillable = ['order_id', 'user_id', 'from_status', 'to_status', 'note'];
+    protected $fillable = ['order_id', 'user_id', 'from_status', 'to_status', 'note', 'photo'];
+
+    /** Stored as a path; the buyer needs something they can point an <img> at. */
+    public function getPhotoUrlAttribute(): ?string
+    {
+        return $this->photo ? asset('storage/'.$this->photo) : null;
+    }
 
     public function order(): BelongsTo
     {

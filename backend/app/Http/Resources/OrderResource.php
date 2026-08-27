@@ -42,6 +42,9 @@ class OrderResource extends JsonResource
 
             'totals' => [
                 'subtotal'        => (float) $this->subtotal,
+                // What the scale at the door did to the bill. Signed, and kept
+                // apart from the subtotal so the agreed figure stays readable.
+                'weight_adjustment' => (float) $this->weight_adjustment,
                 'discount'        => (float) $this->discount,
                 'delivery_charge' => (float) $this->delivery_charge,
                 'total'           => (float) $this->total,
@@ -190,6 +193,10 @@ class OrderResource extends JsonResource
 
         return [
             'amount'      => $this->refundable_amount,
+            // Why anything is owed. A cancelled order and a goat that weighed
+            // light are both refunds, but telling a buyer their live order was
+            // cancelled would be alarming and untrue.
+            'reason'      => $this->status === 'cancelled' ? 'cancelled' : 'overpaid',
             // The rails we can actually send money out on — the same ones
             // seller payouts use, since it is the same direction of travel.
             'methods'     => PaymentMethod::payout()

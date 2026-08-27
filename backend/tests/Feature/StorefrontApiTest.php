@@ -77,7 +77,7 @@ class StorefrontApiTest extends TestCase
         $this->getJson('/api/v1/orders')->assertUnauthorized();
     }
 
-    public function test_a_customer_can_register_and_receives_a_token(): void
+    public function test_a_customer_registering_is_asked_to_verify_their_email(): void
     {
         $this->postJson('/api/v1/auth/register', [
             'name'                  => 'New Buyer',
@@ -87,7 +87,11 @@ class StorefrontApiTest extends TestCase
             'password_confirmation' => 'secret-password',
         ])
             ->assertCreated()
-            ->assertJsonStructure(['data' => ['user' => ['id', 'name'], 'token']]);
+            // No token yet: the address has to be proved first, or a made-up
+            // one would be as good as a real one. EmailVerificationTest covers
+            // the rest of the journey.
+            ->assertJsonPath('data.verification_required', true)
+            ->assertJsonMissingPath('data.token');
 
         $this->assertDatabaseHas('users', ['email' => 'buyer@example.test', 'role' => 'customer']);
     }

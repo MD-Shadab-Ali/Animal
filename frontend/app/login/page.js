@@ -71,7 +71,11 @@ export default function LoginPage() {
             {errors.password && <div className="invalid-feedback">{errors.password[0]}</div>}
           </div>
 
-          <div className="mb-4" />
+          {/* Sits against the password field, which is the moment someone
+              discovers they cannot remember it. */}
+          <p className="text-end small mb-4">
+            <Link href="/forgot-password" className="text-brand">Forgot your password?</Link>
+          </p>
 
           <button className="btn btn-brand w-100 mb-3" type="submit" disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}

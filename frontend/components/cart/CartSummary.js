@@ -55,6 +55,12 @@ export default function CartSummary({
               <li className="d-flex justify-content-between gap-3 py-1" key={item.id}>
                 <span className="text-ink">
                   {item.goat?.name || item.name}
+                  {/* The weight on the line, not the one in the listing's name.
+                      A listing offering a range is bought at one weight, and
+                      that is the figure the buyer is paying for. */}
+                  {item.weight_kg && (
+                    <span className="text-soft"> &middot; {item.weight_kg} kg</span>
+                  )}
                   {item.quantity > 1 && (
                     <span className="text-soft"> &times; {item.quantity}</span>
                   )}

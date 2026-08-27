@@ -206,6 +206,17 @@ export default function ListingForm({ listing = null }) {
                     <strong>{settings.currency_symbol || ''}{rate.top}</strong>.
                   </>
                 )}
+                {/* A weight in the name is fine when you sell one animal at one
+                    weight. Across a range it contradicts every buyer who picks
+                    anything else, and it travels with their order. */}
+                {rate.top && /\d+\s*kg/i.test(form.name || '') && (
+                  <div className="text-soft mt-1">
+                    <i className="bi bi-info-circle me-1" aria-hidden="true" />
+                    A weight at the end of your listing name is removed when you save. The
+                    weight field above is what buyers see, and a name saying otherwise would
+                    argue with their order.
+                  </div>
+                )}
               </div>
             </div>
           )}

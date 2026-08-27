@@ -128,16 +128,32 @@ class OrderForm
                     ->columns(2)
                     ->schema([
                         Select::make('status')
-                            // Delivered is not offered until the money is in.
-                            // Record the payment and the order closes itself.
-                            ->options(fn (?Order $record) => collect(Order::STATUSES)
-                                // reject() hands the callback (value, key); for
-                                // STATUSES that is (label, status).
-                                ->reject(fn (string $label, string $status) => $status === 'delivered'
-                                    && $record
-                                    && $record->status !== 'delivered'
-                                    && ! $record->canBeDelivered())
-                                ->all())
+                            // Where it is, and the one place it may go next.
+                            // Anything else would let an order skip a state
+                            // here that the orders list refuses to skip.
+                            // The whole run is listed so the sequence is
+                            // visible; only the reachable ones can be picked.
+                            ->options(Order::STATUSES)
+                            ->disableOptionWhen(function (string $value, ?Order $record): bool {
+                                if (! $record) {
+                                    return false;
+                                }
+
+                                // Where it already is, so the form can hold it.
+                                if ($value === $record->status) {
+                                    return false;
+                                }
+
+                                if ($value === 'cancelled') {
+                                    return ! $record->isCancellable();
+                                }
+
+                                if ($value !== $record->nextStatus()) {
+                                    return true;
+                                }
+
+                                return $value === 'delivered' && ! $record->canBeDelivered();
+                            })
                             ->required()
                             ->native(false)
                             // Seller-supplied orders are run by the seller and by
@@ -149,7 +165,12 @@ class OrderForm
                                         .'and every one is written to the order history below.';
                                 }
 
-                                if ($record && ! $record->canBeDelivered()) {
+                                if ($record && $record->nextStatus() === null) {
+                                    return 'This order is finished — there is no step after '
+                                        .($record->status_label).'.';
+                                }
+
+                                if ($record && $record->nextStatus() === 'delivered' && ! $record->canBeDelivered()) {
                                     return 'Delivered is unavailable until this order is paid for — record the '
                                         .'payment on the Payments tab and it will close itself.';
                                 }
@@ -202,9 +223,24 @@ class OrderForm
                         TextInput::make('order_number')->disabled(),
                         TextInput::make('payment_method')->disabled(),
                         TextInput::make('subtotal')->disabled()->prefix(fn () => Setting::currencySymbol()),
+
+                        // Between the subtotal and the total, for the same
+                        // reason the view page shows it: without it these four
+                        // figures do not add up on a re-weighed order.
+                        TextInput::make('weight_adjustment')
+                            ->label('Weight adjustment')
+                            ->disabled()
+                            ->prefix(fn () => Setting::currencySymbol())
+                            ->visible(fn (?Order $record) => (bool) $record?->hasWeightAdjustment())
+                            ->helperText('Re-priced from the weight recorded at the door. The '
+                                .'subtotal above is still what was agreed at checkout.'),
+
                         TextInput::make('discount')->disabled()->prefix(fn () => Setting::currencySymbol()),
                         TextInput::make('delivery_charge')->disabled()->prefix(fn () => Setting::currencySymbol()),
-                        TextInput::make('total')->disabled()->prefix(fn () => Setting::currencySymbol()),
+                        TextInput::make('total')
+                            ->label(fn (?Order $record) => $record?->hasWeightAdjustment() ? 'Total charged' : 'Total')
+                            ->disabled()
+                            ->prefix(fn () => Setting::currencySymbol()),
                     ]),
             ]),
 

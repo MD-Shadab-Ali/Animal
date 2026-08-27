@@ -93,7 +93,16 @@ class OrderPaymentTest extends TestCase
         $order->update(['status' => 'delivered']);
     }
 
-    public function test_paying_in_full_closes_an_order_that_is_out_for_delivery(): void
+    /**
+     * Paying a `full` order does not deliver it.
+     *
+     * Money on a pay-up-front order arrives long before the goat does, so the
+     * balance says nothing about whether anything turned up. Someone who was
+     * there has to say so -- the buyer has a button, and staff can set it by
+     * hand. Closing it here released the seller's earnings for an animal
+     * nobody had laid eyes on.
+     */
+    public function test_paying_in_full_does_not_close_an_order_by_itself(): void
     {
         $order = $this->placeOrder();
         $order->update(['status' => 'out_for_delivery']);
@@ -105,8 +114,29 @@ class OrderPaymentTest extends TestCase
 
         $order = $order->fresh();
 
-        $this->assertSame('delivered', $order->status);
+        $this->assertSame('out_for_delivery', $order->status);
         $this->assertSame('paid', $order->payment_status);
+        $this->assertNull($order->delivered_at);
+
+        // And it is waiting on a person, which is what the buyer's
+        // confirmation button and the staff queue both key off.
+        $this->assertTrue($order->canConfirmReceipt());
+    }
+
+    /** Cash on delivery is handed over at the door, so paying does close it. */
+    public function test_cash_on_delivery_closes_the_order_when_it_is_collected(): void
+    {
+        $order = $this->placeOrder();
+        $order->update(['status' => 'out_for_delivery', 'payment_plan' => 'on_delivery']);
+
+        app(PaymentService::class)->record($order->fresh(), [
+            'amount' => $order->total,
+            'method' => 'cod',
+        ]);
+
+        $order = $order->fresh();
+
+        $this->assertSame('delivered', $order->status);
         $this->assertNotNull($order->delivered_at);
     }
 
