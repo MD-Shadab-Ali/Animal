@@ -41,10 +41,30 @@ class PageForm
 
             Section::make('Presentation')->columns(2)->schema([
                 FileUpload::make('banner_image')
+                    ->label('Banner image')
                     ->image()
                     ->imageEditor()
                     ->directory('pages')
-                    ->maxSize(4096),
+                    ->maxSize(4096)
+                    ->helperText('Runs across the top of the page. Optional.'),
+
+                FileUpload::make('side_image')
+                    ->label('Side image')
+                    ->image()
+                    ->imageEditor()
+                    ->directory('pages')
+                    ->maxSize(4096)
+                    ->helperText('Sits in the column beside the text and follows it down the '
+                        .'page. Leave empty and the page keeps a single column of copy. '
+                        .'Use your own photograph: a stock picture on a page that says '
+                        .'"our farm" does more harm than no picture at all.'),
+
+                TextInput::make('side_image_caption')
+                    ->label('Side image caption')
+                    ->maxLength(255)
+                    ->columnSpanFull()
+                    ->helperText('Shown under the picture, and read aloud in place of it by '
+                        .'screen readers. Describe what is actually in the photograph.'),
 
                 TextInput::make('sort_order')->numeric()->default(0),
 

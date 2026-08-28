@@ -6,10 +6,13 @@ use App\Models\Banner;
 use App\Models\Faq;
 use App\Models\HomeSection;
 use App\Models\Testimonial;
+use Database\Seeders\Concerns\SeedsMedia;
 use Illuminate\Database\Seeder;
 
 class ContentSeeder extends Seeder
 {
+    use SeedsMedia;
+
     public function run(): void
     {
         $this->banners();
@@ -27,6 +30,7 @@ class ContentSeeder extends Seeder
                 'description' => 'Every animal is weighed on a calibrated scale and vet-checked before it is listed. No surprises on delivery day.',
                 'button_text' => 'Browse goats',
                 'button_link' => '/shop',
+                'image'       => 'banners/hero-honest-weights.jpg',
             ],
             [
                 'title'       => 'Dashain khasi, booked early',
@@ -34,6 +38,7 @@ class ContentSeeder extends Seeder
                 'description' => 'Weight and teeth verified on every animal. Book ahead of the rush and we will hold it for you until Dashain.',
                 'button_text' => 'See Dashain goats',
                 'button_link' => '/shop?category=dashain-goats',
+                'image'       => 'banners/hero-dashain-khasi.jpg',
             ],
             [
                 'title'       => 'Qurbani animals, age verified',
@@ -41,6 +46,7 @@ class ContentSeeder extends Seeder
                 'description' => 'Age and teeth checked on every animal in the Qurbani category, so you can buy with confidence.',
                 'button_text' => 'See Qurbani goats',
                 'button_link' => '/shop?category=qurbani-goats',
+                'image'       => 'banners/hero-qurbani.jpg',
             ],
             [
                 'title'       => 'Free delivery inside Kathmandu Valley',
@@ -48,6 +54,7 @@ class ContentSeeder extends Seeder
                 'description' => 'Our own transport, our own handlers. Your goat arrives calm, fed and watered.',
                 'button_text' => 'Check delivery zones',
                 'button_link' => '/pages/delivery-information',
+                'image'       => 'banners/hero-free-delivery.jpg',
             ],
         ];
 
@@ -56,11 +63,11 @@ class ContentSeeder extends Seeder
             // row every time the wording changes, leaving stale banners behind.
             Banner::updateOrCreate(
                 ['placement' => 'hero', 'sort_order' => $i],
-                $banner + [
-                    'image'      => '',
+                [...$banner, ...[
+                    'image'      => $this->seedImage($banner['image']),
                     'text_align' => 'left',
                     'is_active'  => true,
-                ]
+                ]]
             );
         }
     }

@@ -261,25 +261,86 @@ button:disabled { cursor: not-allowed; }
 }
 
 /* ── Announcement + header ───────────────────────────────── */
+/*
+ * The strip was a flat slab of --ink: the darkest thing on the page, sitting
+ * above the logo and quietly outweighing it. A gradient that resolves into the
+ * brand green keeps it present without letting it win, and the hairline below
+ * hands the eye down into the masthead instead of stopping it.
+ */
 .announce {
-  background: var(--ink);
+  position: relative;
+  background:
+    radial-gradient(120% 180% at 12% 0%, color-mix(in srgb, var(--brand-secondary) 22%, transparent), transparent 60%),
+    linear-gradient(100deg, var(--ink), color-mix(in srgb, var(--brand-primary) 92%, #000) 62%, var(--ink));
   color: #fff;
   font-size: .8125rem;
-  padding: .5rem 0;
+  letter-spacing: .01em;
+  padding: .5625rem 0;
   text-align: center;
 }
-.announce a { color: color-mix(in srgb, var(--brand-secondary) 70%, #fff); font-weight: 600; }
+.announce::after {
+  /* A thread of the harvest gold, so the accent appears at the very top of
+     the page rather than only down at the buttons. */
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--brand-accent) 65%, transparent), transparent);
+}
+.announce__icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .14);
+  font-size: .75rem;
+  flex-shrink: 0;
+}
+.announce a {
+  color: #fff;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-secondary) 60%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--speed) var(--ease);
+}
+.announce a:hover { text-decoration-color: #fff; }
+
+/*
+ * One masthead, not three strips.
+ *
+ * The border-bottom drew a hard line under a translucent bar whether or not
+ * anything had scrolled beneath it. A shadow that only appears once the page
+ * moves says the same thing, and says it at the moment it is true.
+ */
+/* Watched by the header's IntersectionObserver. Zero height, no ink. */
+.header__sentinel { height: 1px; margin-bottom: -1px; }
 
 .header {
   position: sticky;
   top: 0;
   z-index: 1040;
-  background: rgba(255, 255, 255, .92);
-  backdrop-filter: saturate(180%) blur(12px);
-  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, .82);
+  backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid transparent;
+  transition: background-color var(--speed) var(--ease),
+              box-shadow var(--speed) var(--ease),
+              border-color var(--speed) var(--ease);
+}
+.header.is-stuck {
+  background: rgba(255, 255, 255, .94);
+  border-bottom-color: var(--line);
+  box-shadow: 0 6px 24px -12px rgba(20, 83, 45, .28);
 }
 
-.header__top { padding: .875rem 0; }
+.header__top {
+  padding: .875rem 0;
+  transition: padding var(--speed) var(--ease);
+}
+/* Gives back a little height once the page is moving, so more of the goats
+   are on screen while scrolling. */
+.header.is-stuck .header__top { padding: .625rem 0; }
 
 .brand {
   display: inline-flex;
@@ -292,15 +353,65 @@ button:disabled { cursor: not-allowed; }
   letter-spacing: -.02em;
 }
 .brand:hover { color: var(--brand-primary); }
+
+/*
+ * An uploaded logo replaces the mark and wordmark entirely, so it has to carry
+ * the masthead on its own. Sized off the height rather than the width: the
+ * upload can be any aspect ratio, and height is what has to agree with the
+ * search field beside it.
+ */
+/*
+ * An uploaded logo replaces the mark and wordmark entirely, so it has to carry
+ * the masthead on its own. Sized off the height rather than the width: the
+ * upload can be any aspect ratio, and height is what has to agree with the
+ * search field beside it.
+ */
+.brand__logo {
+  display: block;
+  height: 56px;
+  width: auto;
+  max-width: 190px;
+  object-fit: contain;
+  transition: height var(--speed) var(--ease);
+}
+.header.is-stuck .brand__logo { height: 44px; }
+
+@media (max-width: 575.98px) {
+  .brand__logo { height: 42px; max-width: 140px; }
+}
+
+/*
+ * The mark was a flat filled square. A gradient with a light source at the top
+ * left, a hairline of white inside the edge and a shadow in the brand's own
+ * colour give it the depth the rest of the system already has -- the cards and
+ * buttons all sit on natural shadows, and the logo was the one thing that did
+ * not.
+ */
 .brand__mark {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-md);
-  background: var(--brand-primary);
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--brand-secondary) 55%, var(--brand-primary)),
+    var(--brand-primary) 55%,
+    color-mix(in srgb, var(--brand-primary) 88%, #000));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .28),
+    0 4px 12px -4px color-mix(in srgb, var(--brand-primary) 55%, transparent);
   color: #fff;
   font-size: 1.1rem;
+  transition: transform var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
+}
+.brand:hover .brand__mark {
+  /* Lift only. The tilt read as playful, and nothing about spending thirty
+     thousand rupees on a live animal is playful. */
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .35),
+    0 8px 18px -6px color-mix(in srgb, var(--brand-primary) 62%, transparent);
 }
 
 /* The search bar is the primary action on a marketplace. */
@@ -344,46 +455,110 @@ button:disabled { cursor: not-allowed; }
 }
 .searchbar__go:hover { background: color-mix(in srgb, var(--brand-primary) 85%, #000); }
 
+/*
+ * These were transparent until hovered, so the wishlist, bag and account read
+ * as three glyphs floating in space rather than as controls. A faint tinted
+ * face and a hairline border give them an edge to aim at, which is most of
+ * what makes a target feel clickable.
+ */
 .icon-btn {
   position: relative;
   display: inline-grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  border: 0;
-  background: transparent;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
   color: var(--ink);
-  font-size: 1.2rem;
-  transition: background-color var(--speed) var(--ease), color var(--speed) var(--ease);
+  font-size: 1.15rem;
+  transition: background-color var(--speed) var(--ease),
+              border-color var(--speed) var(--ease),
+              color var(--speed) var(--ease),
+              transform var(--speed) var(--ease);
 }
-.icon-btn:hover { background: var(--surface); color: var(--brand-primary); }
+.icon-btn:hover {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--brand-primary);
+  transform: translateY(-1px);
+}
+.icon-btn:active { transform: translateY(0); }
 
 .icon-btn__count {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
+  top: -3px;
+  right: -3px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
   border-radius: var(--radius-pill);
-  background: var(--brand-accent);
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--brand-accent) 82%, #fff),
+    var(--brand-accent));
   color: #fff;
   font-size: .6875rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   display: grid;
   place-items: center;
   line-height: 1;
+  /* Sits half off the button, so it needs its own edge to stay legible
+     against whatever it overlaps. */
+  box-shadow: 0 0 0 2px #fff, 0 2px 6px -1px color-mix(in srgb, var(--brand-accent) 55%, transparent);
 }
 
-/* Category strip below the header */
+/* The one thing on this row that is a call to action, weighted accordingly. */
+.header .btn-brand {
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--brand-primary) 50%, transparent);
+  transition: transform var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
+}
+.header .btn-brand:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px -6px color-mix(in srgb, var(--brand-primary) 58%, transparent);
+}
+
+/*
+ * Category strip below the header.
+ *
+ * The border-top cut the masthead in two. A hairline that fades out at both
+ * ends separates the rows without drawing a line across the whole page.
+ */
 .header__nav {
-  border-top: 1px solid var(--line);
+  position: relative;
   overflow-x: auto;
   scrollbar-width: none;
 }
+.header__nav::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line) 15%, var(--line) 85%, transparent);
+}
 .header__nav::-webkit-scrollbar { display: none; }
-.header__nav-inner { display: flex; gap: .25rem; padding: .375rem 0; }
+.header__nav-inner { display: flex; gap: .125rem; padding: .3125rem 0; }
+
+/*
+ * The nav sitting inside the top row rather than on a band of its own.
+ *
+ * It keeps the .header__nav class so every navlink rule below still applies,
+ * and this modifier undoes the parts that only made sense for a full-width
+ * strip: the hairline above it, and the row's own padding.
+ */
+.header__nav--inline {
+  position: static;
+  gap: .125rem;
+  justify-content: center;
+  min-width: 0;
+}
+.header__nav--inline::before { content: none; }
+
+/* Seven items, a logo and three controls have to share one line. Tightening
+   the padding buys the room back before anything has to scroll. */
+@media (max-width: 1199.98px) {
+  .header__nav--inline .navlink { padding-inline: .625rem; font-size: .875rem; }
+}
 
 .navlink {
   white-space: nowrap;
@@ -400,13 +575,50 @@ button:disabled { cursor: not-allowed; }
 .navlink:hover { background: var(--surface); color: var(--brand-primary); }
 .navlink.is-active { background: var(--surface); color: var(--brand-primary); font-weight: 600; }
 
+/*
+ * Header nav only -- .navlink is shared with the account, seller and mobile
+ * menus, and those are vertical lists where an underline would make no sense.
+ *
+ * The active state was --surface on white: a 4% tint doing the job of telling
+ * someone which page they are on. The underline carries that instead, in the
+ * accent, so it survives at a glance.
+ */
+.header__nav .navlink {
+  position: relative;
+  background: transparent;
+  padding: .5rem .9375rem;
+}
+.header__nav .navlink::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 0;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-accent);
+  transform: translateX(-50%);
+  transition: width var(--speed) var(--ease);
+}
+.header__nav .navlink:hover {
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  color: var(--brand-primary);
+}
+.header__nav .navlink:hover::after { width: 18px; }
+.header__nav .navlink.is-active {
+  background: transparent;
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+.header__nav .navlink.is-active::after { width: calc(100% - 1.875rem); }
+
 /* ── Hero: search-led marketplace pattern ────────────────── */
 .hero {
   position: relative;
   background: linear-gradient(160deg, var(--surface) 0%, #fff 60%);
   overflow: hidden;
 }
-.hero__inner { position: relative; z-index: 2; padding: clamp(2.5rem, 6vw, 4.5rem) 0; }
+.hero__inner { position: relative; z-index: 2; padding-block: clamp(2.5rem, 6vw, 4.5rem); }
 .hero__title {
   font-size: clamp(2rem, 4.6vw, 3.25rem);
   font-weight: 700;
@@ -423,30 +635,156 @@ button:disabled { cursor: not-allowed; }
   border: 1px solid var(--line);
 }
 
-.hero__media {
-  position: relative;
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  background: var(--surface);
-  box-shadow: var(--shadow-xl);
-}
-.hero__media img { width: 100%; height: 100%; object-fit: cover; }
 .hero__media-empty { width: 100%; height: 100%; display: grid; place-items: center; color: var(--line-strong); font-size: 4rem; }
 
-.hero__stat {
+/* ── Hero banner carousel ────────────────────────────────────
+   One large active frame with the neighbouring slides showing as
+   narrow faded peeks. Depth is soft shadow only, never a hard offset,
+   and the accent stays on var(--brand-primary) so the whole thing
+   still follows the brand colour an admin sets in Site settings. */
+.carousel-hero {
+  --slide-shadow: 0 30px 60px -18px rgba(15, 23, 42, .28), 0 8px 24px -12px rgba(15, 23, 42, .18);
+  --peek-shadow: 0 18px 40px -22px rgba(15, 23, 42, .22);
+  --slide-ease: cubic-bezier(.22, 1, .36, 1);
+
+  position: relative;
+  outline: none;
+}
+.carousel-hero:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 6px; border-radius: var(--radius-xl); }
+
+.carousel-hero__stage { display: flex; align-items: center; justify-content: center; gap: .75rem; }
+@media (min-width: 576px) { .carousel-hero__stage { gap: 1.25rem; } }
+
+.carousel-hero__peek {
+  display: none;
+  position: relative;
+  flex: 0 0 13%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  opacity: .85;
+  box-shadow: var(--peek-shadow);
+  box-shadow: var(--peek-shadow), 0 0 0 1px rgba(0, 0, 0, .05);
+}
+@media (min-width: 576px) { .carousel-hero__peek { display: block; } }
+.carousel-hero__peek img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.1); }
+/* The fade is what makes a neighbour read as a hint instead of a rival. */
+.carousel-hero__peek::after {
+  content: '';
   position: absolute;
-  bottom: var(--space-md);
-  left: var(--space-md);
-  right: var(--space-md);
+  inset: 0;
+}
+.carousel-hero__peek--left::after { background: linear-gradient(90deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .15)); }
+.carousel-hero__peek--right::after { background: linear-gradient(270deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .15)); }
+
+.carousel-hero__slide {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--slide-shadow), 0 0 0 1px rgba(0, 0, 0, .05);
+}
+.carousel-hero__slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: carousel-fade .6s var(--slide-ease);
+}
+@keyframes carousel-fade { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+
+.carousel-hero__blank { width: 100%; height: 100%; background: var(--surface); display: block; }
+
+.carousel-hero__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(15, 23, 42, .45), transparent 55%);
+}
+
+.carousel-hero__caption {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 1.25rem;
+}
+.carousel-hero__caption strong { display: block; color: #fff; font-size: 1rem; font-weight: 600; }
+.carousel-hero__eyebrow {
+  display: block;
+  font-size: .6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .18em;
+  color: var(--line-strong);
+  margin-bottom: .125rem;
+}
+.carousel-hero__progress {
+  max-width: 20rem;
+  height: 4px;
+  margin: 1.75rem auto 0;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+.carousel-hero__progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand-primary); }
+.carousel-hero__progress span.is-running { animation: carousel-progress linear forwards; }
+@keyframes carousel-progress { from { width: 0; } to { width: 100%; } }
+
+.carousel-hero__dots { display: flex; justify-content: center; gap: .625rem; margin-top: 1.25rem; }
+.carousel-hero__dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  transition: width var(--speed) var(--ease), background var(--speed) var(--ease);
+}
+.carousel-hero__dot:hover { background: var(--muted); }
+/* Active state is said three ways at once -- stretched dot, progress fill,
+   ringed thumbnail -- so it survives at a glance and without colour. */
+.carousel-hero__dot.is-active { width: 28px; background: var(--brand-primary); }
+
+.carousel-hero__thumbs { display: flex; justify-content: center; gap: .75rem; margin-top: 2.25rem; }
+.carousel-hero__thumb {
+  width: 4rem;
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  opacity: .6;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .05);
+  transition: opacity var(--speed) var(--ease), width var(--speed) var(--ease);
+}
+.carousel-hero__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.carousel-hero__thumb:hover { opacity: 1; }
+.carousel-hero__thumb.is-active {
+  width: 5rem;
+  opacity: 1;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--brand-primary);
+}
+
+.hero__stat {
+  margin-top: 1.5rem;
   background: rgba(255, 255, 255, .94);
   backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: .75rem 1rem;
   display: flex;
   justify-content: space-around;
   gap: .5rem;
   box-shadow: var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carousel-hero__slide img { animation: none; }
+  .carousel-hero__progress span.is-running { animation: none; }
 }
 .hero__stat b { display: block; color: var(--ink); font-family: var(--font-heading), sans-serif; font-size: 1.05rem; }
 .hero__stat span { font-size: .75rem; color: var(--muted); }
@@ -608,23 +946,96 @@ button:disabled { cursor: not-allowed; }
 .pagehead {
   background: linear-gradient(180deg, var(--surface) 0%, #fff 100%);
   border-bottom: 1px solid var(--line);
-  padding: clamp(1.5rem, 4vw, 2.75rem) 0;
+  /* Less underneath than above: the heading needs air over it, but the space
+     below was being counted twice with the section that follows. */
+  padding: clamp(1.5rem, 4vw, 2.75rem) 0 clamp(1rem, 2.5vw, 1.5rem);
 }
+
+/*
+ * A page header already leaves room under itself, and the section below leaves
+ * room above itself. Stacked, that was 44px + 72px of nothing between the
+ * subtitle and the first control on the page. The header's own padding is the
+ * one doing the work here, so the section stands down.
+ */
+.pagehead + .section { padding-top: clamp(.5rem, 1.5vw, 1rem); }
+.pagehead + .section-tight { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
+
+/*
+ * Same double-count under a hero, only wider: the hero's inner container ends
+ * with 72px of its own, and the section below opened with another 72px. The
+ * hero is already the more generous of the two, so the section stands down
+ * further here than it does after a page header.
+ */
+.hero + .section { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
+.hero + .section-tight { padding-top: clamp(.75rem, 2vw, 1.25rem); }
 
 .crumbs { font-size: .8125rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: .375rem; align-items: center; }
 .crumbs a { color: var(--muted); }
 .crumbs a:hover { color: var(--brand-primary); }
 
 /* ── Shop filters ────────────────────────────────────────── */
+/*
+ * The filter panel: sticky, and no scrollbar of its own.
+ *
+ * Its content runs to about 766px against roughly 683px of viewport below the
+ * masthead, so it does not fit. Capping it and scrolling inside worked, but
+ * put a second scrollbar on the page. Simply removing the cap would have been
+ * worse: pinned to the top, the last 83px -- the price range and the
+ * "Available only" box -- would sit below the fold with no way to reach them.
+ *
+ * So it is anchored to the bottom instead. The panel travels with the page
+ * until its lower edge meets the bottom of the window, then pins there. Every
+ * control is reachable on the way, nothing is clipped, and the filters stay
+ * on screen for the whole of a results list three screens tall.
+ */
 .filters {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: var(--space-md) var(--space-lg);
-  position: sticky;
-  top: 88px;
   max-height: calc(100dvh - 108px);
   overflow-y: auto;
+
+  /* The scrollbar is hidden, not the scrolling.
+     The filters run to about 766px against roughly 683px of viewport below
+     the masthead, so something has to give. Dropping the overflow entirely
+     would leave the price range and the "Available only" box below the fold
+     with no way to reach them: pinned, the page scrolling past does not help.
+     So the panel still scrolls, it just does not draw a second scrollbar down
+     the middle of the page. Same trick the header nav uses. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.filters::-webkit-scrollbar { display: none; }
+
+/*
+ * Sticky travels inside its own containing block, and this wrapper was exactly
+ * as tall as the panel it holds -- so there was nowhere to travel and the
+ * panel simply scrolled away. Filling the column gives it the full height of
+ * the results beside it to move through.
+ *
+ * Guarded to desktop: on narrow screens this element is Bootstrap's collapse
+ * for the filter toggle, and a fixed height would fight the open animation.
+ */
+/*
+ * The wrapper does the sticking, not the panel.
+ *
+ * A sticky element can only travel inside its own containing block, and the
+ * panel's wrapper is exactly as tall as the panel -- nowhere to go, which is
+ * why `position: sticky` on .filters never actually pinned anything. The
+ * wrapper's container is the column, which runs the full height of the
+ * results beside it, so that is the thing to pin.
+ */
+@media (min-width: 992px) {
+  .filters-rail {
+    position: sticky;
+    top: 88px;
+  }
+}
+
+/* Stacked above the results on narrow screens, where pinning would cover them. */
+@media (max-width: 991.98px) {
+  .filters { max-height: none; overflow: visible; }
 }
 .filters__group { padding-block: var(--space-md); border-top: 1px solid var(--line); }
 .filters__group:first-of-type { border-top: 0; padding-top: .25rem; }
@@ -810,6 +1221,26 @@ button:disabled { cursor: not-allowed; }
 
 /* ── Footer ──────────────────────────────────────────────── */
 .footer { background: var(--ink); color: rgba(255, 255, 255, .74); padding-top: var(--space-3xl); margin-top: auto; }
+/*
+ * The footer has room the masthead does not, so the mark can be bigger here.
+ *
+ * It sits on --ink, and the uploaded logo is a dark silhouette on white paper,
+ * which would render as a white card on dark green. The footer variant is the
+ * same artwork as a light silhouette on transparency, so the footer's own
+ * colour shows through and there is no box at all.
+ */
+.footer__logo {
+  display: block;
+  height: 72px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+}
+
+@media (max-width: 575.98px) {
+  .footer__logo { height: 60px; }
+}
+
 .footer h3 { color: #fff; font-size: .8125rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: var(--space-md); }
 .footer a { color: rgba(255, 255, 255, .74); font-size: .9375rem; }
 .footer a:hover { color: var(--brand-secondary); }
@@ -864,6 +1295,48 @@ button:disabled { cursor: not-allowed; }
 .prose p { margin-bottom: 1rem; }
 .prose ul, .prose ol { margin-bottom: 1rem; padding-left: 1.25rem; }
 .prose a { text-decoration: underline; }
+
+/*
+ * A page's body copy, aligned with the title above it.
+ *
+ * It was a centred col-lg-8: the heading began at the container's left edge
+ * and the text began 186px further in, so the two never shared a line to read
+ * down. Capped in characters rather than pixels, because what makes a column
+ * hard to read is how far the eye travels to find the next line, and that is
+ * measured in words.
+ */
+.prose--page { max-width: 68ch; }
+
+/*
+ * The picture beside a page's copy.
+ *
+ * Sticky from the large breakpoint up, so it stays with the reader instead of
+ * scrolling away after the first paragraph. Below that the columns stack and
+ * pinning would just cover the words, so it becomes an ordinary image between
+ * the title and the text.
+ */
+.page-aside__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+}
+
+.page-aside__caption {
+  margin-top: .625rem;
+  font-size: .8125rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+@media (min-width: 992px) {
+  .page-aside {
+    position: sticky;
+    top: 104px;
+  }
+}
 
 /* ── Order status timeline ───────────────────────────────── */
 .timeline { display: flex; gap: .5rem; }
@@ -922,3 +1395,110 @@ button:disabled { cursor: not-allowed; }
 .spinner-border { color: currentColor; }
 
 .nav-link:focus-visible, .navlink:focus-visible { outline-offset: -2px; }
+
+/* ── Testimonial marquee ─────────────────────────────────── */
+/*
+ * Edges fade rather than cut. A hard clip announces "there is a box here and
+ * things are sliding out of it"; the mask lets quotes arrive and leave without
+ * a visible boundary, which is what makes a loop feel continuous.
+ */
+.marquee {
+  position: relative;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+
+.marquee__track {
+  display: flex;
+  gap: var(--space-md);
+  width: max-content;
+  /* transform only: animating margin or left would relayout every frame. */
+  animation: marquee-drift var(--marquee-duration, 60s) linear infinite;
+  will-change: transform;
+}
+
+/* Reading a quote should not be a race. */
+.marquee:hover .marquee__track,
+.marquee:focus-within .marquee__track { animation-play-state: paused; }
+
+.marquee__item {
+  flex: 0 0 clamp(260px, 78vw, 340px);
+  display: flex;
+}
+
+@keyframes marquee-drift {
+  from { transform: translate3d(0, 0, 0); }
+  /* Half, because the track holds the list twice. */
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+/*
+ * Motion off: no drift at all. The quotes become a row you push yourself,
+ * which is the same content under your own control rather than none of it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .marquee { overflow-x: auto; scrollbar-width: none; }
+  .marquee::-webkit-scrollbar { display: none; }
+  .marquee__track { animation: none; }
+}
+
+/*
+ * The global rule above zeroes transition durations, but a transform with no
+ * duration still moves -- it just moves instantly. For a reader who asked for
+ * no motion, a header that jumps is the thing they asked not to have.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn:hover,
+  .brand:hover .brand__mark,
+  .header .btn-brand:hover { transform: none; }
+
+  /* Hold the masthead at one height rather than resizing it under them. */
+  .header.is-stuck .header__top { padding: .875rem 0; }
+  .header.is-stuck .brand__logo { height: 56px; }
+
+  .header__nav .navlink::after { transition: none; }
+}
+
+/* ── Back to top ─────────────────────────────────────────────
+   Bottom-right, clear of the mobile nav drawer. z-index sits under
+   Bootstrap's offcanvas (1045) and modal (1055) on purpose, so it
+   tucks behind them rather than floating over a dialog. */
+.to-top {
+  position: fixed;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  z-index: 1030;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 1.125rem;
+  box-shadow: var(--shadow-lg);
+
+  /* Hidden with visibility, not opacity alone: it has to leave the tab
+     order while it is off screen. */
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--speed) var(--ease),
+              transform var(--speed) var(--ease),
+              background var(--speed) var(--ease),
+              visibility 0s linear var(--speed);
+}
+.to-top.is-visible {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition-delay: 0s;
+}
+.to-top:hover { background: var(--ink); }
+.to-top:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .to-top { transition: opacity var(--speed) var(--ease), visibility 0s linear var(--speed); transform: none; }
+}

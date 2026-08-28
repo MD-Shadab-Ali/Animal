@@ -17,10 +17,26 @@ export default function ShopFilters({ filters, categories }) {
   const priceMax = Math.ceil(filters?.price?.max || 0);
   const priceMin = Math.floor(filters?.price?.min || 0);
 
-  // The URL is the source of truth; local state only holds the value mid-drag,
-  // so clearing filters elsewhere moves the slider without an effect.
-  const [dragging, setDragging] = useState(null);
-  const maxPrice = dragging ?? (searchParams.get('max_price') || String(priceMax));
+  /*
+   * The URL is the source of truth; this holds the value from the first touch
+   * until the URL catches up.
+   *
+   * Releasing the slider used to clear the local value and then navigate, and
+   * a navigation does not land in the same tick -- so for a moment the value
+   * fell back to the old query string and the thumb snapped back to where it
+   * had been before jumping to where it was dropped.
+   *
+   * Recording which query the value was chosen against means no effect is
+   * needed to expire it: once the query changes the note is simply stale, and
+   * the URL takes over again. That also keeps "Clear all" working, because
+   * clearing changes the query.
+   */
+  const query = searchParams.toString();
+  const [pending, setPending] = useState(null);
+
+  const maxPrice = pending?.forQuery === query
+    ? pending.value
+    : (searchParams.get('max_price') || String(priceMax));
 
   const apply = useCallback((updates) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -31,7 +47,6 @@ export default function ShopFilters({ filters, categories }) {
     });
 
     params.delete('page');
-    setDragging(null);
     router.push(`/shop?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
 
@@ -110,7 +125,7 @@ export default function ShopFilters({ filters, categories }) {
             max={priceMax}
             step={1000}
             value={maxPrice}
-            onChange={(event) => setDragging(event.target.value)}
+            onChange={(event) => setPending({ value: event.target.value, forQuery: query })}
             onMouseUp={() => apply({ max_price: maxPrice })}
             onTouchEnd={() => apply({ max_price: maxPrice })}
             onKeyUp={(event) => event.key === 'Enter' && apply({ max_price: maxPrice })}

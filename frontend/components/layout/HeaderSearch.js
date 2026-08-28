@@ -16,7 +16,6 @@ function SearchField() {
 
   return (
     <form onSubmit={submit} role="search" className="searchbar">
-      <i className="bi bi-search text-soft" aria-hidden="true" />
       <input
         type="search"
         value={term}

@@ -48,7 +48,7 @@ class BannerForm
                     ->imageEditor()
                     ->directory('banners')
                     ->maxSize(4096)
-                    ->helperText('Wide image, around 1920x900.'),
+                    ->helperText('16:9 image, around 1920x1080 — the hero frame crops to 16:9.'),
 
                 FileUpload::make('mobile_image')
                     ->image()

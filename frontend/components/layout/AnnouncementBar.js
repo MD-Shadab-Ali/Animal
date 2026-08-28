@@ -9,7 +9,9 @@ export default function AnnouncementBar({ settings }) {
   return (
     <div className="announce">
       <div className="container d-flex align-items-center justify-content-center gap-2">
-        <i className="bi bi-truck" aria-hidden="true" />
+        <span className="announce__icon" aria-hidden="true">
+          <i className="bi bi-truck" />
+        </span>
         {link ? <Link href={link}>{text}</Link> : <span>{text}</span>}
       </div>
     </div>

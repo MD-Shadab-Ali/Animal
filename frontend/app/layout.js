@@ -3,6 +3,7 @@ import Providers from './providers';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import AnnouncementBar from '@/components/layout/AnnouncementBar';
+import ScrollToTop from '@/components/layout/ScrollToTop';
 import { getSiteData, buildMetadata } from '@/lib/site';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
@@ -62,6 +63,7 @@ export default async function RootLayout({ children }) {
           <Header site={site} />
           <main id="main" className="flex-grow-1">{children}</main>
           <Footer site={site} />
+          <ScrollToTop />
         </Providers>
       </body>
     </html>

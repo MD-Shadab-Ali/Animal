@@ -26,3 +26,12 @@ Using gstack skills: After install, skills like /qa, /ship, /review, /investigat
 and /browse are available. Use /browse for all web browsing.
 Use the resolved install path above for gstack file paths
 (default: ~/.claude/skills/gstack).
+
+## Health Stack
+
+- typecheck: php -l (backend/app, backend/routes, backend/config, backend/database)
+- lint-php: backend/vendor/bin/pint --test
+- lint-js: npx eslint (run in frontend/)
+- test: php artisan test (run in backend/)
+- deadcode: (none configured — knip/depcheck not installed)
+- shell: (shellcheck not installed)

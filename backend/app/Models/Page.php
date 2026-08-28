@@ -10,6 +10,7 @@ class Page extends Model
 {
     protected $fillable = [
         'title', 'slug', 'excerpt', 'body', 'banner_image',
+        'side_image', 'side_image_caption',
         'is_active', 'show_in_footer', 'meta_title', 'meta_description', 'sort_order',
     ];
 
@@ -38,5 +39,11 @@ class Page extends Model
     public function getBannerImageUrlAttribute(): ?string
     {
         return $this->banner_image ? asset('storage/'.$this->banner_image) : null;
+    }
+
+    /** The picture that sits beside the copy, if this page has one. */
+    public function getSideImageUrlAttribute(): ?string
+    {
+        return $this->side_image ? asset('storage/'.$this->side_image) : null;
     }
 }

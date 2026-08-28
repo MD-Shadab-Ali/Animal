@@ -1,3 +1,10 @@
+/**
+ * Every panel starts closed.
+ *
+ * Opening the first one by default gave that question an answer nobody asked
+ * for, and pushed the rest of the list down the page -- so the one thing a
+ * reader could not see was the range of questions on offer.
+ */
 export default function FaqAccordion({ items = [], id = 'faq' }) {
   if (!items.length) return null;
 
@@ -7,11 +14,11 @@ export default function FaqAccordion({ items = [], id = 'faq' }) {
         <div className="accordion-item" key={index}>
           <h3 className="accordion-header">
             <button
-              className={`accordion-button ${index === 0 ? '' : 'collapsed'}`}
+              className="accordion-button collapsed"
               type="button"
               data-bs-toggle="collapse"
               data-bs-target={`#${id}-${index}`}
-              aria-expanded={index === 0}
+              aria-expanded="false"
               aria-controls={`${id}-${index}`}
             >
               {item.question}
@@ -19,7 +26,7 @@ export default function FaqAccordion({ items = [], id = 'faq' }) {
           </h3>
           <div
             id={`${id}-${index}`}
-            className={`accordion-collapse collapse ${index === 0 ? 'show' : ''}`}
+            className="accordion-collapse collapse"
             data-bs-parent={`#${id}`}
           >
             <div className="accordion-body prose" dangerouslySetInnerHTML={{ __html: item.answer }} />

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettings } from '@/context/SiteContext';
 
 // What buyers in Nepal actually search for.
@@ -13,10 +13,23 @@ const POPULAR = [
   ['Dairy does', 'Beetal'],
 ];
 
+const AUTOPLAY_MS = 6000;
+
+/** Wraps an index onto the slide list, so prev from 0 lands on the last one. */
+const wrap = (index, length) => ((index % length) + length) % length;
+
 /**
- * Search-first hero. On a marketplace the search bar is the call to action,
- * so it sits above the fold and the admin's banners supply the surrounding
- * copy and imagery.
+ * Search-first hero with a center-stage banner carousel.
+ *
+ * The search bar is the call to action on a marketplace, so it keeps the left
+ * column and the admin's banners rotate on the right. Every hero banner the
+ * admin has published gets a turn: the headline, description and button on the
+ * left belong to the slide on screen, so the four banners are four real
+ * messages rather than one message and three unused images.
+ *
+ * The stage shows the neighbouring slides as narrow, faded peek frames. That is
+ * the whole reason it reads as calm -- one frame is clearly the subject, and
+ * the next one is a hint rather than a competitor.
  */
 export default function Hero({ banners = [] }) {
   const router = useRouter();
@@ -32,13 +45,46 @@ export default function Hero({ banners = [] }) {
     image: null,
   }];
 
+  const count = slides.length;
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [motionOk, setMotionOk] = useState(true);
+  const stageRef = useRef(null);
+
+  const go = useCallback((index) => setActive(wrap(index, count)), [count]);
+  const next = useCallback(() => setActive((i) => wrap(i + 1, count)), [count]);
+  const prev = useCallback(() => setActive((i) => wrap(i - 1, count)), [count]);
+
+  // Someone who asked the OS to calm animations down gets a carousel that
+  // holds still: no autoplay, no slide transition. They can still step
+  // through it themselves.
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setMotionOk(!query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    if (count < 2 || paused || !motionOk) return undefined;
+    const timer = setTimeout(next, AUTOPLAY_MS);
+    return () => clearTimeout(timer);
+  }, [active, count, paused, motionOk, next]);
+
+  const onKeyDown = (event) => {
+    if (event.key === 'ArrowLeft') { event.preventDefault(); prev(); }
+    if (event.key === 'ArrowRight') { event.preventDefault(); next(); }
+  };
+
   const search = (event) => {
     event.preventDefault();
     const query = term.trim();
     router.push(query ? `/shop?search=${encodeURIComponent(query)}` : '/shop');
   };
 
-  const slide = slides[0];
+  const slide = slides[active];
+  const many = count > 1;
 
   return (
     <section className="hero">
@@ -53,7 +99,6 @@ export default function Hero({ banners = [] }) {
 
             <div className="hero__search mb-3">
               <form onSubmit={search} role="search" className="searchbar mb-3">
-                <i className="bi bi-search text-soft" aria-hidden="true" />
                 <input
                   type="search"
                   value={term}
@@ -89,10 +134,92 @@ export default function Hero({ banners = [] }) {
           </div>
 
           <div className="col-lg-6">
-            <div className="hero__media">
-              {slide.image
-                ? <img src={slide.image} alt={slide.title || ''} />
-                : <div className="hero__media-empty"><i className="bi bi-flower3" aria-hidden="true" /></div>}
+            <div
+              className="carousel-hero"
+              ref={stageRef}
+              role="region"
+              aria-roledescription="carousel"
+              aria-label="Featured banners"
+              tabIndex={0}
+              onKeyDown={onKeyDown}
+              onMouseEnter={() => setPaused(true)}
+              onMouseLeave={() => setPaused(false)}
+              onFocus={() => setPaused(true)}
+              onBlur={() => setPaused(false)}
+            >
+              <div className="carousel-hero__stage">
+                {many && (
+                  <div className="carousel-hero__peek carousel-hero__peek--left" aria-hidden="true">
+                    {slides[wrap(active - 1, count)].image
+                      ? <img src={slides[wrap(active - 1, count)].image} alt="" />
+                      : <div className="carousel-hero__blank" />}
+                  </div>
+                )}
+
+                <figure className="carousel-hero__slide">
+                  {slide.image
+                    ? <img src={slide.image} alt={slide.title || ''} />
+                    : <div className="hero__media-empty"><i className="bi bi-flower3" aria-hidden="true" /></div>}
+
+                  <div className="carousel-hero__scrim" aria-hidden="true" />
+
+                  <figcaption className="carousel-hero__caption">
+                    {slide.subtitle && <span className="carousel-hero__eyebrow">{slide.subtitle}</span>}
+                    <strong>{slide.title}</strong>
+                  </figcaption>
+                </figure>
+
+                {many && (
+                  <div className="carousel-hero__peek carousel-hero__peek--right" aria-hidden="true">
+                    {slides[wrap(active + 1, count)].image
+                      ? <img src={slides[wrap(active + 1, count)].image} alt="" />
+                      : <div className="carousel-hero__blank" />}
+                  </div>
+                )}
+              </div>
+
+              {many && (
+                <>
+                  {/* Keyed on the slide so the fill restarts its run each time. */}
+                  <div className="carousel-hero__progress">
+                    <span
+                      key={active}
+                      className={paused || !motionOk ? '' : 'is-running'}
+                      style={{ animationDuration: `${AUTOPLAY_MS}ms` }}
+                    />
+                  </div>
+
+                  <div className="carousel-hero__dots" role="tablist" aria-label="Choose a banner">
+                    {slides.map((item, index) => (
+                      <button
+                        key={item.id ?? index}
+                        type="button"
+                        role="tab"
+                        className={`carousel-hero__dot ${index === active ? 'is-active' : ''}`}
+                        aria-selected={index === active}
+                        aria-label={item.title || `Banner ${index + 1}`}
+                        onClick={() => go(index)}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="carousel-hero__thumbs">
+                    {slides.map((item, index) => (
+                      <button
+                        key={item.id ?? index}
+                        type="button"
+                        className={`carousel-hero__thumb ${index === active ? 'is-active' : ''}`}
+                        onClick={() => go(index)}
+                        aria-label={`Show ${item.title || `banner ${index + 1}`}`}
+                      >
+                        {item.image
+                          ? <img src={item.image} alt="" />
+                          : <span className="carousel-hero__blank" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <div className="hero__stat">
                 <div><b>Vet checked</b><span>Every animal</span></div>

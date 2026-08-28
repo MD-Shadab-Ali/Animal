@@ -81,7 +81,7 @@ export default async function ShopPage({ searchParams }) {
                 <i className="bi bi-sliders" aria-hidden="true" /> Filters
               </button>
 
-              <div className="collapse d-lg-block" id="shopFilters">
+              <div className="collapse d-lg-block filters-rail" id="shopFilters">
                 <Suspense fallback={<div className="filters"><div className="skeleton skeleton-line" style={{ width: '60%' }} /></div>}>
                   <ShopFilters filters={filters} categories={categories} />
                 </Suspense>

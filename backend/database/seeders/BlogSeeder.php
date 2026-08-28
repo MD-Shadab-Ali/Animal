@@ -5,11 +5,14 @@ namespace Database\Seeders;
 use App\Models\Post;
 use App\Models\PostCategory;
 use App\Models\User;
+use Database\Seeders\Concerns\SeedsMedia;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
 class BlogSeeder extends Seeder
 {
+    use SeedsMedia;
+
     public function run(): void
     {
         $author = User::where('role', 'admin')->first();
@@ -43,6 +46,12 @@ class BlogSeeder extends Seeder
             ],
         ];
 
+        $covers = [
+            'house-a-goat-in-a-city-yard',
+            'feeding-schedule',
+            'checking-a-goat-before-buying',
+        ];
+
         foreach ($posts as $i => [$category, $title, $excerpt, $body]) {
             Post::updateOrCreate(
                 ['slug' => Str::slug($title)],
@@ -52,6 +61,9 @@ class BlogSeeder extends Seeder
                     'title'            => $title,
                     'excerpt'          => $excerpt,
                     'body'             => $body,
+                    'cover_image'      => isset($covers[$i])
+                        ? $this->seedImage("posts/{$covers[$i]}.jpg")
+                        : null,
                     'is_published'     => true,
                     'is_featured'      => $i === 0,
                     'published_at'     => now()->subDays(($i + 1) * 4),

@@ -7,8 +7,11 @@ use App\Models\ContactMessage;
 use App\Models\Goat;
 use App\Models\Inquiry;
 use App\Models\Subscriber;
+use App\Models\User;
+use App\Notifications\ContactMessageReceivedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 class ContactController extends Controller
 {
@@ -22,7 +25,15 @@ class ContactController extends Controller
             'message' => ['required', 'string', 'max:5000'],
         ]);
 
-        ContactMessage::create($data);
+        $contactMessage = ContactMessage::create($data);
+
+        // Tell somebody. The row on its own is only found by whoever thinks to
+        // go looking, which is nobody when there is nothing to look for.
+        $staff = User::staffRecipients();
+
+        if ($staff->isNotEmpty()) {
+            Notification::send($staff, new ContactMessageReceivedNotification($contactMessage));
+        }
 
         return response()->json([
             'message' => 'Thanks for writing. We will get back to you shortly.',

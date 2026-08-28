@@ -29,7 +29,7 @@ export default function Footer({ site }) {
                 <img
                   src={settings.footer_logo || settings.site_logo}
                   alt={settings.site_name}
-                  style={{ maxHeight: 40 }}
+                  className="footer__logo"
                 />
               ) : (
                 <span className="brand text-white mb-0">
