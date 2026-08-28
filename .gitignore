@@ -15,5 +15,17 @@ desktop.ini
 **/.env.*.local
 *.log
 
+# ---- AI tooling installed per machine ----
+# Not part of the application. The team-wide rules that everyone does share
+# live in .claude/ (settings.json and the gstack hook), which stays tracked.
+.agents/
+.gstack/
+skills-lock.json
+
+# ---- crash dumps ----
+# Cygwin writes these wherever a shell died. Two were tracked by accident and
+# reappeared as "modified" after every crash.
+*.stackdump
+
 # ---- stray ----
 ~/
