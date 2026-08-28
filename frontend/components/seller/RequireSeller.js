@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useSeller } from '@/context/SellerContext';
+import { ADMIN_URL } from '@/lib/admin';
 
 /**
  * Gate for the seller area. Each state gets its own explanation rather than a
@@ -10,7 +11,7 @@ import { useSeller } from '@/context/SellerContext';
  * one knows why. The API enforces the same rules.
  */
 export default function RequireSeller({ children }) {
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, isStaff } = useAuth();
   const { seller, loading } = useSeller();
 
   if (authLoading || loading) {
@@ -25,6 +26,26 @@ export default function RequireSeller({ children }) {
         <Link href="/login" className="btn btn-brand px-4">
           Sign in
         </Link>
+      </div>
+    );
+  }
+
+  // Checked before the generic "not selling yet" state below, which would
+  // otherwise send a staff member off to an application they cannot make.
+  if (isStaff) {
+    return (
+      <div className="empty">
+        <i className="bi bi-shield-check empty__icon" aria-hidden="true" />
+        <h1 className="h4">This area is for sellers</h1>
+        <p>Staff accounts manage listings, orders and payouts from the admin panel.</p>
+        <a
+          className="btn btn-brand px-4"
+          href={ADMIN_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open admin panel
+        </a>
       </div>
     );
   }

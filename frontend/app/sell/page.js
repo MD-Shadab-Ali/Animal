@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useSeller } from '@/context/SellerContext';
 import { useSettings } from '@/context/SiteContext';
+import { ADMIN_URL } from '@/lib/admin';
 import SellerApplicationForm from '@/components/seller/SellerApplicationForm';
 
 const STEPS = [
@@ -18,7 +19,7 @@ const STEPS = [
 export default function SellPage() {
   const router = useRouter();
   const settings = useSettings();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isStaff } = useAuth();
   const { seller, loading } = useSeller();
 
   // Applicants and approved sellers go straight through — the seller area already
@@ -90,7 +91,30 @@ export default function SellPage() {
               </div>
             )}
 
-            {isAuthenticated && <SellerApplicationForm />}
+            {/* Staff approve these applications and settle the payouts that
+                follow, so they cannot be on the other side of one. Their own
+                stock is listed in the panel instead. Said here rather than
+                after a long form and a rejected submit. */}
+            {isAuthenticated && isStaff && (
+              <div className="panel text-center">
+                <h2 className="h5 mb-2">Staff accounts do not apply here</h2>
+                <p className="text-soft mb-3">
+                  You review seller applications, so you cannot submit one. List the
+                  farm&apos;s own goats from the admin panel — they sell alongside
+                  seller listings.
+                </p>
+                <a
+                  className="btn btn-brand px-4"
+                  href={ADMIN_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open admin panel
+                </a>
+              </div>
+            )}
+
+            {isAuthenticated && !isStaff && <SellerApplicationForm />}
           </div>
         </div>
       </section>

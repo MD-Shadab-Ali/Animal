@@ -192,14 +192,26 @@ class AuthController extends Controller
         return response()->json(['message' => 'Password changed.']);
     }
 
+    /**
+     * The shape the storefront holds as the signed-in user.
+     *
+     * `role` and `is_staff` are here so the storefront can offer a staff member
+     * the way through to the admin panel, and keep seller-only prompts away
+     * from them. They are hints for rendering and nothing more -- what a
+     * request may actually do is decided here, by the middleware and the
+     * controllers, never by what the browser believes about itself. The list of
+     * areas each role may open stays on the server for the same reason.
+     */
     private function userPayload(User $user): array
     {
         return [
-            'id'     => $user->id,
-            'name'   => $user->name,
-            'email'  => $user->email,
-            'phone'  => $user->phone,
-            'avatar' => $user->avatar_url,
+            'id'       => $user->id,
+            'name'     => $user->name,
+            'email'    => $user->email,
+            'phone'    => $user->phone,
+            'avatar'   => $user->avatar_url,
+            'role'     => $user->role->value,
+            'is_staff' => $user->isStaff(),
         ];
     }
 }

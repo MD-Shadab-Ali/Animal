@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'seller' => \App\Http\Middleware\EnsureUserIsSeller::class,
         ]);
     })

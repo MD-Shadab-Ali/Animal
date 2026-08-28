@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { ADMIN_URL } from '@/lib/admin';
 
 export default function MobileNav({
-  navigation, settings, isAuthenticated, user, seller, isApprovedSeller, onLogout,
+  navigation, settings, isAuthenticated, user, isStaff, seller, isApprovedSeller, onLogout,
 }) {
   return (
     <div className="offcanvas offcanvas-end" tabIndex="-1" id="mobileNav" aria-labelledby="mobileNavLabel">
@@ -30,6 +31,19 @@ export default function MobileNav({
           {isAuthenticated ? (
             <>
               <div className="text-soft small">Signed in as <strong className="text-ink">{user?.name}</strong></div>
+
+              {isStaff && (
+                <a
+                  className="btn btn-brand"
+                  href={ADMIN_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-bs-dismiss="offcanvas"
+                >
+                  <i className="bi bi-speedometer2 me-1" aria-hidden="true" />
+                  Admin panel
+                </a>
+              )}
 
               {seller && (
                 <Link href="/seller" className="btn btn-brand" data-bs-dismiss="offcanvas">

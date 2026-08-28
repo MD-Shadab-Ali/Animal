@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { ADMIN_URL } from '@/lib/admin';
 
 const LINKS = [
   ['/account', 'My orders', 'bi-box-seam'],
@@ -13,7 +14,7 @@ const LINKS = [
 
 export default function AccountNav() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, isStaff } = useAuth();
 
   return (
     <div className="panel">
@@ -37,6 +38,17 @@ export default function AccountNav() {
             <i className={`bi ${icon} me-2`} />{label}
           </Link>
         ))}
+
+        {isStaff && (
+          <a
+            className="navlink text-brand fw-semibold"
+            href={ADMIN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <i className="bi bi-speedometer2 me-2" />Admin panel
+          </a>
+        )}
 
         <button className="navlink text-start text-danger border-0 bg-transparent w-100" onClick={logout}>
           <i className="bi bi-box-arrow-right me-2" />Sign out

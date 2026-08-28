@@ -29,6 +29,16 @@ class SellerAccountController extends Controller
             ]);
         }
 
+        // Staff already sell through house stock in the admin panel, and they
+        // are the ones who approve applications -- letting them apply here puts
+        // the same person on both sides of that decision, and on both sides of
+        // the payouts that follow it.
+        if ($request->user()->isStaff()) {
+            throw ValidationException::withMessages([
+                'farm_name' => ['Staff accounts cannot apply to sell. List house stock from the admin panel instead.'],
+            ]);
+        }
+
         // Query rather than read the relation: it may already be loaded and stale,
         // and this guard has to agree with the unique index on sellers.user_id.
         $existing = Seller::withTrashed()->where('user_id', $request->user()->id)->first();

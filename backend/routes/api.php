@@ -76,7 +76,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     | Authenticated — cart, checkout and the customer account
     |--------------------------------------------------------------------------
     */
-    Route::middleware('auth:sanctum')->group(function () {
+    // `active` sits alongside the guard so a token that outlived its account
+    // being disabled cannot reach any of this.
+    Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
         Route::put('auth/profile', [AuthController::class, 'updateProfile'])->name('auth.profile');

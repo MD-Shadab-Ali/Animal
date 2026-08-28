@@ -98,7 +98,26 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const value = useMemo(
-    () => ({ user, token, loading, isAuthenticated: Boolean(token && user), login, register, verifyEmail, resendVerification, logout, refreshUser }),
+    () => ({
+      user,
+      token,
+      loading,
+      isAuthenticated: Boolean(token && user),
+
+      // Admin, manager or staff. Decides what this app offers a signed-in
+      // person -- the way through to the admin panel, and the seller prompts
+      // that do not apply to them. It never decides whether a request is
+      // allowed: the API settles that on its own, and this flag comes from the
+      // API in the first place.
+      isStaff: Boolean(user?.is_staff),
+
+      login,
+      register,
+      verifyEmail,
+      resendVerification,
+      logout,
+      refreshUser,
+    }),
     [user, token, loading, login, register, verifyEmail, resendVerification, logout, refreshUser]
   );
 
