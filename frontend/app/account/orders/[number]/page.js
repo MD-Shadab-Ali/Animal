@@ -46,6 +46,13 @@ export default function OrderDetailPage() {
   // it — or after it has already moved on — is worse than saying nothing.
   const justPlaced = searchParams.get('placed') === '1';
 
+  /*
+   * What the payment provider sent them back with. Only ever a label: the
+   * order's own payment figures come from the server, which decided them by
+   * asking the provider directly.
+   */
+  const paymentResult = searchParams.get('payment');
+
   useEffect(() => {
     if (!token) return;
 
@@ -164,7 +171,45 @@ export default function OrderDetailPage() {
           proves. It also has to name the *next* step, which depends on how they
           chose to pay — promising a phone call while a "pay now" panel sits
           underneath it is worse than saying nothing. */}
-      {justPlaced && order.status === 'pending' && (
+      {paymentResult === 'success' && (
+        <div className="alert alert-success mb-0 d-flex gap-3 align-items-start">
+          <i className="bi bi-check-circle-fill fs-5 lh-1 mt-1" aria-hidden="true" />
+          <div>
+            <strong className="d-block">Payment received.</strong>
+            <span className="small">
+              Nothing more to do — we have your money and we are holding your goat.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {paymentResult === 'pending' && (
+        <div className="alert alert-warning mb-0 d-flex gap-3 align-items-start">
+          <i className="bi bi-hourglass-split fs-5 lh-1 mt-1" aria-hidden="true" />
+          <div>
+            <strong className="d-block">Your payment is still going through.</strong>
+            <span className="small">
+              We are waiting on your provider. This page updates itself once they confirm —
+              there is no need to pay again.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {paymentResult === 'failed' && (
+        <div className="alert alert-danger mb-0 d-flex gap-3 align-items-start">
+          <i className="bi bi-x-circle-fill fs-5 lh-1 mt-1" aria-hidden="true" />
+          <div>
+            <strong className="d-block">That payment did not go through.</strong>
+            <span className="small">
+              Nothing has been taken. Your order is still here — you can try paying again below.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* One greeting at a time: a payment result is the more useful of the two. */}
+      {justPlaced && ! paymentResult && order.status === 'pending' && (
         <div className="alert alert-success mb-0 d-flex gap-3 align-items-start">
           <i className="bi bi-check-circle-fill fs-5 lh-1 mt-1" aria-hidden="true" />
           <div>

@@ -58,6 +58,15 @@ class OrderRefundTest extends TestCase
             'payee_account_name' => 'Goat Haven Pvt Ltd',
             'payee_account_number' => '9800000000',
         ]);
+
+        // eSewa confirms itself now, so a buyer cannot file a claim on it.
+        // Bank transfer is the method that still takes one.
+        PaymentMethod::where('code', 'bank_transfer')->update([
+            'is_active' => true,
+            'payee_account_name' => 'Goat Haven Pvt Ltd',
+            'payee_account_number' => '0123456789',
+            'payee_bank_name' => 'Nabil Bank',
+        ]);
     }
 
     /** An order with an advance paid, then cancelled. */
@@ -533,7 +542,7 @@ class OrderRefundTest extends TestCase
 
         // A claim filed, then the buyer changes their mind entirely.
         $this->postJson('/api/v1/orders/'.$number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => 1000,
         ])->assertCreated();
 

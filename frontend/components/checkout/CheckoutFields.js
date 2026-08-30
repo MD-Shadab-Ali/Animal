@@ -2,7 +2,7 @@
 
 import { formatMoney } from '@/lib/format';
 
-const PLAN_LABELS = {
+export const PLAN_LABELS = {
   full: {
     title: 'Pay in full now',
     hint: 'The whole amount up front. Nothing to hand over at the door.',
@@ -18,7 +18,7 @@ const PLAN_LABELS = {
 };
 
 /** What the buyer hands over today under each plan. */
-function planAmount(plan, total, method, options) {
+export function planAmount(plan, total, method, options) {
   if (plan === 'full') return total;
   if (plan === 'on_delivery') return 0;
 
@@ -34,9 +34,9 @@ function planAmount(plan, total, method, options) {
 }
 
 export default function CheckoutFields({
-  form, errors, update, addresses, applyAddress,
+  form, errors, update, prefilled,
   options, settings, selectedZone, selectedMethod, subtotalAfterDiscount, orderTotal,
-  paymentPlan,
+  paymentPlan, step = 1,
 }) {
   const field = (key, label, { type = 'text', required = false, colClass = 'col-md-6', as = 'input', rows } = {}) => (
     <div className={colClass} key={key}>
@@ -65,99 +65,73 @@ export default function CheckoutFields({
     </div>
   );
 
+  const onDelivery = step === 1;
+  const onPayment = step === 2;
+
   return (
     <div className="d-grid gap-4">
-      {addresses.length > 0 && (
-        <section className="panel">
-          <h2 className="h6 mb-3">Use a saved address</h2>
-          <div className="row g-2">
-            {addresses.map((address) => (
-              <div className="col-md-6" key={address.id}>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary w-100 text-start p-3"
-                  onClick={() => applyAddress(address)}
-                >
-                  <strong className="d-block small">
-                    {address.label}
-                    {address.is_default && <span className="badge text-bg-light border ms-2">Default</span>}
-                  </strong>
-                  <span className="small text-soft">
-                    {address.address_line}, {address.city}
-                  </span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
+      {onDelivery && (
       <section className="panel">
-        <h2 className="h6 mb-3">Delivery details</h2>
+        <h2 className="h6 mb-1">Delivery details</h2>
+        <p className="small text-soft mb-3">
+          {prefilled
+            ? 'Filled in from your account. Change anything here for this order only, or update it in your addresses.'
+            : 'Where the goat is going, and who to call on arrival. We will keep this on your account so the next order fills itself in.'}
+        </p>
         <div className="row g-3">
           {field('customer_name', 'Full name', { required: true })}
           {field('customer_phone', 'Phone number', { type: 'tel', required: true })}
           {field('customer_email', 'Email', { type: 'email', colClass: 'col-12' })}
-          {field('address_line', 'Street address', { required: true, colClass: 'col-12' })}
-          {field('area', 'Area / thana')}
+          {field('address_line', 'Street address', { required: true })}
           {field('city', 'City / district', { required: true })}
+          {field('area', 'Area / thana')}
           {field('postal_code', 'Postal code')}
-          {field('order_notes', 'Delivery note (optional)', { as: 'textarea', colClass: 'col-12', rows: 2 })}
-
-          <div className="col-12">
-            <div className="form-check">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id="save_address"
-                checked={form.save_address}
-                onChange={update('save_address')}
-              />
-              <label className="form-check-label" htmlFor="save_address">
-                Save this address for next time
-              </label>
-            </div>
-          </div>
         </div>
       </section>
 
-      <section className="panel">
-        <h2 className="h6 mb-3">Delivery zone</h2>
-        {errors.delivery_zone_id && (
-          <div className="alert alert-danger py-2 small">{errors.delivery_zone_id[0]}</div>
-        )}
+      )}
 
-        <div className="d-grid gap-2">
+      {onDelivery && (
+      <section className="panel">
+        <h2 className="h6 mb-3" id="delivery-zone-heading">Delivery zone</h2>
+
+        {/*
+         * One choice out of three does not need three cards. The price rides
+         * along in each option, and whatever the chosen zone had to say for
+         * itself -- where it covers, how long it takes -- moves underneath,
+         * where it is read once instead of three times.
+         */}
+        <select
+          id="delivery_zone_id"
+          aria-labelledby="delivery-zone-heading"
+          className={`form-select ${errors.delivery_zone_id ? 'is-invalid' : ''}`}
+          value={form.delivery_zone_id}
+          onChange={update('delivery_zone_id')}
+        >
+          {!form.delivery_zone_id && <option value="">Choose a delivery zone…</option>}
+
           {(options?.delivery_zones || []).map((zone) => {
-            const selected = String(form.delivery_zone_id) === String(zone.id);
             const isFree = zone.free_above !== null && subtotalAfterDiscount >= zone.free_above;
 
             return (
-              <label
-                key={zone.id}
-                className={`d-flex gap-3 p-3 border rounded ${selected ? 'border-2' : ''}`}
-                style={selected ? { borderColor: 'var(--brand-primary)' } : undefined}
-              >
-                <input
-                  type="radio"
-                  className="form-check-input mt-1"
-                  name="delivery_zone_id"
-                  value={zone.id}
-                  checked={selected}
-                  onChange={update('delivery_zone_id')}
-                />
-                <span className="flex-grow-1">
-                  <strong className="d-block">{zone.name}</strong>
-                  {zone.description && <span className="small text-soft d-block">{zone.description}</span>}
-                  {zone.estimated_time && <span className="small text-soft">Arrives in {zone.estimated_time}</span>}
-                </span>
-                <span className="fw-semibold text-nowrap">
-                  {isFree ? <span className="text-success">Free</span> : formatMoney(zone.charge, settings)}
-                </span>
-              </label>
+              <option key={zone.id} value={zone.id}>
+                {zone.name} — {isFree ? 'Free' : formatMoney(zone.charge, settings)}
+              </option>
             );
           })}
-        </div>
+        </select>
+
+        {errors.delivery_zone_id && (
+          <div className="invalid-feedback d-block">{errors.delivery_zone_id[0]}</div>
+        )}
+
+        {selectedZone && (selectedZone.description || selectedZone.estimated_time) && (
+          <p className="small text-soft mt-2 mb-0">
+            {selectedZone.description}
+            {selectedZone.description && selectedZone.estimated_time ? ' · ' : ''}
+            {selectedZone.estimated_time && `Arrives in ${selectedZone.estimated_time}`}
+          </p>
+        )}
 
         {selectedZone?.free_above && subtotalAfterDiscount < selectedZone.free_above && (
           <p className="small text-soft mt-2 mb-0">
@@ -166,108 +140,103 @@ export default function CheckoutFields({
         )}
       </section>
 
+      )}
+
+      {onPayment && (
       <section className="panel">
-        <h2 className="h6 mb-3">Payment</h2>
+        <h2 className="h6 mb-3" id="payment-method-heading">Payment</h2>
+
+        {/*
+         * Bound to the derived method, not to the raw field: an admin can make
+         * a method delivery-only at any time, and the fallback has to be what
+         * shows as chosen.
+         */}
+        <select
+          id="payment_method"
+          aria-labelledby="payment-method-heading"
+          className={`form-select ${errors.payment_method ? 'is-invalid' : ''}`}
+          value={selectedMethod?.code || ''}
+          onChange={update('payment_method')}
+        >
+          {(options?.payment_methods || []).map((method) => (
+            <option
+              key={method.code}
+              value={method.code}
+              // Still listed, so the buyer can see it exists and how it works,
+              // but it cannot start an order.
+              disabled={method.selectable === false}
+            >
+              {method.name}{method.selectable === false ? ' — on delivery only' : ''}
+            </option>
+          ))}
+        </select>
+
         {errors.payment_method && (
-          <div className="alert alert-danger py-2 small">{errors.payment_method[0]}</div>
+          <div className="invalid-feedback d-block">{errors.payment_method[0]}</div>
         )}
 
-        <div className="d-grid gap-2">
-          {(options?.payment_methods || []).map((method) => {
-            // Compare against the derived method, so a stale delivery-only
-            // choice never shows as ticked.
-            const selected = selectedMethod?.code === method.code;
+        {(selectedMethod?.instructions || selectedMethod?.logo) && (
+          <div className="d-flex align-items-center gap-2 mt-2">
+            {selectedMethod.logo && (
+              <img src={selectedMethod.logo} alt="" style={{ height: 20 }} />
+            )}
+            {selectedMethod.instructions && (
+              <span className="small text-soft">{selectedMethod.instructions}</span>
+            )}
+          </div>
+        )}
 
-            // Delivery-only methods stay on the list so the buyer can see how
-            // they will settle up, but they cannot start an order.
-            const disabled = method.selectable === false;
-
-            return (
-              <label
-                key={method.code}
-                className={`d-flex gap-3 p-3 border rounded ${selected ? 'border-2' : ''} ${disabled ? 'bg-body-secondary' : ''}`}
-                style={{
-                  ...(selected ? { borderColor: 'var(--brand-primary)' } : {}),
-                  ...(disabled ? { opacity: 0.75, cursor: 'not-allowed' } : {}),
-                }}
-              >
-                <input
-                  type="radio"
-                  className="form-check-input mt-1"
-                  name="payment_method"
-                  value={method.code}
-                  checked={selected}
-                  onChange={update('payment_method')}
-                  disabled={disabled}
-                />
-                <span className="flex-grow-1">
-                  <strong className="d-block">
-                    {method.name}
-                    {disabled && (
-                      <span className="badge text-bg-secondary ms-2 align-middle">On delivery only</span>
-                    )}
-                  </strong>
-
-                  {/* The reason replaces the how-to-pay blurb — that blurb
-                      describes settling up later, not placing an order. */}
-                  <span className="small text-soft">
-                    {disabled ? method.unavailable_reason : method.instructions}
-                  </span>
-                </span>
-                {method.logo && <img src={method.logo} alt={method.name} style={{ height: 24 }} />}
-              </label>
-            );
-          })}
-        </div>
+        {/* Why the greyed-out one is greyed out. It answers a question the
+            disabled option raises but cannot itself explain. */}
+        {(options?.payment_methods || [])
+          .filter((method) => method.selectable === false && method.unavailable_reason)
+          .map((method) => (
+            <p key={method.code} className="small text-soft mt-2 mb-0">
+              <strong className="text-ink">{method.name}:</strong> {method.unavailable_reason}
+            </p>
+          ))}
 
         {/* Always shown, even when the method allows only one answer: the buyer
             should never reach "Place order" unsure what they owe today. */}
         {(selectedMethod?.plans?.length || 0) > 0 && (
           <div className="mt-4">
-            <h3 className="h6 mb-1">
+            <h3 className="h6 mb-1" id="payment-plan-heading">
               {selectedMethod.plans.length > 1 ? 'When would you like to pay?' : 'When you pay'}
             </h3>
-            <p className="small text-soft mb-3">
+            <p className="small text-soft mb-2">
               {selectedMethod.requires_advance
                 ? `${selectedMethod.name} needs money up front — we hold the goat once it is in.`
                 : 'We hold the goat for you once the money is in.'}
             </p>
 
-            {errors.payment_plan && (
-              <div className="alert alert-danger py-2 small">{errors.payment_plan[0]}</div>
-            )}
-
-            <div className="d-grid gap-2">
+            <select
+              id="payment_plan"
+              aria-labelledby="payment-plan-heading"
+              className={`form-select ${errors.payment_plan ? 'is-invalid' : ''}`}
+              value={paymentPlan}
+              onChange={update('payment_plan')}
+              disabled={selectedMethod.plans.length === 1}
+            >
               {selectedMethod.plans.map((plan) => {
-                const selected = paymentPlan === plan;
                 const amount = planAmount(plan, orderTotal, selectedMethod, options);
 
                 return (
-                  <label
-                    key={plan}
-                    className={`d-flex gap-3 p-3 border rounded ${selected ? 'border-2' : ''}`}
-                    style={selected ? { borderColor: 'var(--brand-primary)' } : undefined}
-                  >
-                    <input
-                      type="radio"
-                      className="form-check-input mt-1"
-                      name="payment_plan"
-                      value={plan}
-                      checked={selected}
-                      onChange={update('payment_plan')}
-                      disabled={selectedMethod.plans.length === 1}
-                    />
-                    <span className="flex-grow-1">
-                      <strong className="d-block">{PLAN_LABELS[plan]?.title}</strong>
-                      <span className="small text-soft">{PLAN_LABELS[plan]?.hint}</span>
-                    </span>
-                    <span className="fw-bold text-brand text-nowrap">
-                      {amount > 0 ? formatMoney(amount, settings) : 'Nothing now'}
-                    </span>
-                  </label>
+                  <option key={plan} value={plan}>
+                    {PLAN_LABELS[plan]?.title}
+                    {' — '}
+                    {amount > 0 ? formatMoney(amount, settings) : 'Nothing now'}
+                  </option>
                 );
               })}
-            </div>
+            </select>
+
+            {errors.payment_plan && (
+              <div className="invalid-feedback d-block">{errors.payment_plan[0]}</div>
+            )}
+
+            {PLAN_LABELS[paymentPlan]?.hint && (
+              <p className="small text-soft mt-2 mb-0">{PLAN_LABELS[paymentPlan].hint}</p>
+            )}
           </div>
         )}
 
@@ -277,6 +246,7 @@ export default function CheckoutFields({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

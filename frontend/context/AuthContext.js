@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 
 const TOKEN_KEY = 'gh_token';
 const AuthContext = createContext(null);
@@ -27,9 +27,20 @@ export function AuthProvider({ children }) {
             setUser(response.data);
           }
         }
-      } catch {
-        // The stored token expired or was revoked.
-        localStorage.removeItem(TOKEN_KEY);
+      } catch (error) {
+        /*
+         * Only a refusal proves the token is no good.
+         *
+         * This used to throw away the session on *any* failure, which included
+         * the one failure that is not the token's fault: a hard refresh aborts
+         * the request in flight, the rejection lands here while the old page is
+         * still tearing down, and the token was deleted on the way out -- so the
+         * reload came back signed out. A blip, a 500 or a restarted API server
+         * did the same thing. Keep it and let the next load ask again.
+         */
+        if (error instanceof ApiError && error.status === 401) {
+          localStorage.removeItem(TOKEN_KEY);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -63,6 +74,25 @@ export function AuthProvider({ children }) {
     const response = await apiFetch('/auth/register', { method: 'POST', body: payload });
     return response.data;
   }, []);
+
+  /**
+   * Signing in through Google, from either the sign-in or the sign-up page.
+   *
+   * One call for both, because the API decides which it was: an address it
+   * already knows is signed in, one it does not is created and signed in. What
+   * comes back is the same token and user an ordinary sign-in returns, stored
+   * the same way, so nothing downstream can tell a Google account apart from
+   * any other.
+   */
+  const loginWithGoogle = useCallback(async (credential) => {
+    const response = await apiFetch('/auth/google', {
+      method: 'POST',
+      body: { credential },
+    });
+
+    persist(response.data.token, response.data.user);
+    return response.data.user;
+  }, [persist]);
 
   const verifyEmail = useCallback(async (email, code) => {
     const response = await apiFetch('/auth/verify-email', {
@@ -112,13 +142,14 @@ export function AuthProvider({ children }) {
       isStaff: Boolean(user?.is_staff),
 
       login,
+      loginWithGoogle,
       register,
       verifyEmail,
       resendVerification,
       logout,
       refreshUser,
     }),
-    [user, token, loading, login, register, verifyEmail, resendVerification, logout, refreshUser]
+    [user, token, loading, login, loginWithGoogle, register, verifyEmail, resendVerification, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

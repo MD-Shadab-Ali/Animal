@@ -39,9 +39,14 @@ export default function GoatCard({ goat, index = 0 }) {
         <div className="card-goat__tags">
           {goat.is_on_sale && <span className="badge-sale">−{goat.discount_percent}%</span>}
           {!goat.is_available && <span className="badge-sold">Sold</span>}
+          {/* The label is its own element so a card too narrow to seat it
+              beside the discount can drop the wording and keep the tick,
+              rather than pushing the whole badge onto a second row. It stays
+              in the accessibility tree either way. */}
           {goat.is_vaccinated && goat.is_available && (
-            <span className="badge-verified">
-              <i className="bi bi-patch-check-fill" aria-hidden="true" /> Vet checked
+            <span className="badge-verified" title="Vet checked">
+              <i className="bi bi-patch-check-fill" aria-hidden="true" />
+              <span className="badge-verified__label">Vet checked</span>
             </span>
           )}
         </div>

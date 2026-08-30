@@ -6,10 +6,13 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import CartSummary from '@/components/cart/CartSummary';
 import CheckoutFields from '@/components/checkout/CheckoutFields';
+import CheckoutReview from '@/components/checkout/CheckoutReview';
+import CheckoutSteps from '@/components/checkout/CheckoutSteps';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
+import { isGatewayMethod, payThroughGateway } from '@/lib/gateway';
 import { formatMoney } from '@/lib/format';
 
 function CheckoutInner() {
@@ -20,9 +23,10 @@ function CheckoutInner() {
   const { cart, refresh } = useCart();
 
   const [options, setOptions] = useState(null);
-  const [addresses, setAddresses] = useState([]);
+  const [prefilled, setPrefilled] = useState(false);
   const [errors, setErrors] = useState({});
   const [placing, setPlacing] = useState(false);
+  const [step, setStep] = useState(1);
 
   const [form, setForm] = useState({
     customer_name: '',
@@ -64,7 +68,6 @@ function CheckoutInner() {
       .then(([optionsResponse, addressResponse]) => {
         const data = optionsResponse.data;
         setOptions(data);
-        setAddresses(addressResponse.data || []);
 
         setForm((current) => ({
           ...current,
@@ -79,8 +82,18 @@ function CheckoutInner() {
             || '',
         }));
 
-        const preferred = (addressResponse.data || []).find((address) => address.is_default);
-        if (preferred) applyAddress(preferred);
+        /*
+         * The address book is read, never shown. Whatever the buyer marked as
+         * default is the answer; failing that the only one they have, since an
+         * account with a single unmarked address still means that address.
+         */
+        const saved = addressResponse.data || [];
+        const preferred = saved.find((address) => address.is_default) || saved[0];
+
+        if (preferred) {
+          applyAddress(preferred);
+          setPrefilled(true);
+        }
       })
       .catch(() => toast.error('Could not load checkout options.'));
   }, [token, user, applyAddress]);
@@ -137,8 +150,73 @@ function CheckoutInner() {
   const plans = selectedMethod?.plans || [];
   const paymentPlan = plans.includes(form.payment_plan) ? form.payment_plan : (plans[0] || '');
 
+  /*
+   * Which step owns which field. The server validates the whole order at once,
+   * so when it rejects something the buyer may be three steps away from the
+   * input that caused it -- this is what sends them back to it.
+   */
+  const STEP_OF_FIELD = {
+    customer_name: 1, customer_phone: 1, customer_email: 1, address_line: 1,
+    area: 1, city: 1, postal_code: 1, order_notes: 1, delivery_zone_id: 1,
+    save_address: 1, payment_method: 2, payment_plan: 2,
+  };
+
+  const REQUIRED_ON_DELIVERY = {
+    customer_name: 'Please tell us who is receiving the goat.',
+    customer_phone: 'We need a phone number for the delivery.',
+    address_line: 'Please give us a street address.',
+    city: 'Please give us a city or district.',
+  };
+
+  // The same checks the server will run, asked early enough to be useful.
+  const problemsOn = (which) => {
+    const found = {};
+
+    if (which === 1) {
+      Object.entries(REQUIRED_ON_DELIVERY).forEach(([key, message]) => {
+        if (!String(form[key] || '').trim()) found[key] = [message];
+      });
+
+      if (!form.delivery_zone_id) {
+        found.delivery_zone_id = ['Choose where the goat is going.'];
+      }
+    }
+
+    if (which === 2 && !selectedMethod) {
+      found.payment_method = ['Choose how you would like to pay.'];
+    }
+
+    return found;
+  };
+
+  const goTo = (target) => {
+    setStep(target);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const advance = () => {
+    const found = problemsOn(step);
+
+    if (Object.keys(found).length) {
+      setErrors(found);
+      toast.error('Please finish this step first.');
+      return;
+    }
+
+    setErrors({});
+    goTo(Math.min(step + 1, 3));
+  };
+
   const submit = async (event) => {
     event.preventDefault();
+
+    // Enter inside a field submits the form, so the last step is the only one
+    // that may place an order -- everywhere else this just moves forward.
+    if (step < 3) {
+      advance();
+      return;
+    }
+
     setPlacing(true);
     setErrors({});
 
@@ -157,10 +235,47 @@ function CheckoutInner() {
         },
       });
       await refresh();
+
+      const number = response.data.order_number;
+      const method = selectedMethod?.code;
+
+      /*
+       * A gateway order is not finished when the order is created -- that is
+       * the point at which the buyer still has to pay. Send them straight on
+       * rather than to an order page that would only ask them to come back.
+       */
+      if (isGatewayMethod(method)) {
+        toast.success('Order placed. Taking you to ' + selectedMethod.name + '…');
+
+        try {
+          const result = await payThroughGateway(number, method, token);
+
+          // Only reached if there was nothing to pay; otherwise the browser
+          // has already left for the provider.
+          if (result.settled) {
+            router.push(`/account/orders/${number}?placed=1`);
+          }
+
+          return;
+        } catch (error) {
+          // The order exists and is unpaid, which the order page can explain
+          // and offer to retry. Losing them here would be worse.
+          toast.error(error.message || 'Could not open the payment page.');
+          router.push(`/account/orders/${number}?placed=1&payment=failed`);
+
+          return;
+        }
+      }
+
       toast.success(response.message);
-      router.push(`/account/orders/${response.data.order_number}?placed=1`);
+      router.push(`/account/orders/${number}?placed=1`);
     } catch (error) {
-      setErrors(error.errors || {});
+      const failed = error.errors || {};
+      setErrors(failed);
+
+      const owning = Object.keys(failed).map((key) => STEP_OF_FIELD[key]).filter(Boolean);
+      if (owning.length) goTo(Math.min(...owning));
+
       toast.error(error.errors?.cart?.[0] || error.message || 'Could not place your order.');
     } finally {
       setPlacing(false);
@@ -225,44 +340,85 @@ function CheckoutInner() {
   return (
     <div className="section">
       <div className="container">
-        <h1 className="section-title mb-4">Checkout</h1>
+        <div className="checkout__head">
+          <h1 className="section-title mb-0">Checkout</h1>
+          <Link href="/cart" className="btn btn-quiet btn-sm">
+            <i className="bi bi-chevron-left me-1" aria-hidden="true" />
+            Back to cart
+          </Link>
+        </div>
 
-        <form onSubmit={submit}>
+        <CheckoutSteps current={step} onJump={goTo} />
+
+        {/* Our own checks run per step, so the browser's all-at-once pass would
+            only fire on fields that are no longer mounted. */}
+        <form onSubmit={submit} noValidate>
           <div className="row g-4">
             <div className="col-lg-8">
-              <CheckoutFields
-                form={form}
-                errors={errors}
-                update={update}
-                addresses={addresses}
-                applyAddress={applyAddress}
-                options={options}
-                settings={settings}
-                selectedZone={selectedZone}
-                selectedMethod={selectedMethod}
-                subtotalAfterDiscount={subtotalAfterDiscount}
-                orderTotal={orderTotal}
-                paymentPlan={paymentPlan}
-              />
+              {step === 3 ? (
+                <CheckoutReview
+                  form={form}
+                  options={options}
+                  settings={settings}
+                  selectedZone={selectedZone}
+                  selectedMethod={selectedMethod}
+                  deliveryCharge={deliveryCharge}
+                  orderTotal={orderTotal}
+                  paymentPlan={paymentPlan}
+                  onEdit={goTo}
+                />
+              ) : (
+                <CheckoutFields
+                  form={form}
+                  errors={errors}
+                  update={update}
+                  prefilled={prefilled}
+                  options={options}
+                  settings={settings}
+                  selectedZone={selectedZone}
+                  selectedMethod={selectedMethod}
+                  subtotalAfterDiscount={subtotalAfterDiscount}
+                  orderTotal={orderTotal}
+                  paymentPlan={paymentPlan}
+                  step={step}
+                />
+              )}
             </div>
 
             <div className="col-lg-4">
-              <CartSummary
-                deliveryCharge={deliveryCharge}
-                showCoupon={!buyOnly}
-                totals={buyOnly ? { subtotal: subtotalAfterDiscount, discount: 0, total: subtotalAfterDiscount } : null}
-                items={lineItems}
-              />
+              <div className="checkout__aside">
+                <CartSummary
+                  deliveryCharge={deliveryCharge}
+                  showCoupon={!buyOnly}
+                  totals={buyOnly ? { subtotal: subtotalAfterDiscount, discount: 0, total: subtotalAfterDiscount } : null}
+                  items={lineItems}
+                />
 
-              <button className="btn btn-brand btn-lg w-100 mt-3" type="submit" disabled={placing}>
-                {placing ? 'Placing order…' : 'Place order'}
-              </button>
+                <div className="checkout__nav">
+                  {step < 3 ? (
+                    <button className="btn btn-brand btn-lg w-100" type="submit">
+                      {step === 1 ? 'Continue to payment' : 'Review order'}
+                    </button>
+                  ) : (
+                    <button className="btn btn-brand btn-lg w-100" type="submit" disabled={placing}>
+                      {placing ? 'Placing order…' : 'Place order'}
+                    </button>
+                  )}
 
-              <p className="small text-soft text-center mt-2 mb-0">
-                {paymentPlan === 'on_delivery' || !paymentPlan
-                  ? 'Nothing is charged online. Payment is collected on delivery.'
-                  : 'We will show you where to send the money as soon as the order is placed.'}
-              </p>
+                  {step > 1 && (
+                    <button type="button" className="btn btn-quiet w-100" onClick={() => goTo(step - 1)}>
+                      <i className="bi bi-chevron-left me-1" aria-hidden="true" />
+                      Back
+                    </button>
+                  )}
+                </div>
+
+                <p className="small text-soft text-center mt-3 mb-0">
+                  {paymentPlan === 'on_delivery' || !paymentPlan
+                    ? 'Nothing is charged online. Payment is collected on delivery.'
+                    : 'We will show you where to send the money as soon as the order is placed.'}
+                </p>
+              </div>
             </div>
           </div>
         </form>

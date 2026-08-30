@@ -64,6 +64,20 @@ class PaymentService
             ]);
         }
 
+        /*
+         * A gateway settles itself. Letting a buyer also claim one would put
+         * back the very thing the integration removes -- a human deciding
+         * whether an assertion is true -- and would double-count the money
+         * once the provider confirms the real attempt. Staff can still record
+         * one by hand through record(), for an outage or a stuck transaction.
+         */
+        if ($method->isGateway()) {
+            throw ValidationException::withMessages([
+                'method' => [$method->name.' payments are confirmed automatically. '
+                    .'Use the pay button on your order, and contact us if it does not go through.'],
+            ]);
+        }
+
         $payment = $this->create($order, [
             'user_id'               => $payer->id,
             'method'                => $method->code,
@@ -315,7 +329,8 @@ class PaymentService
         ]));
     }
 
-    private function reference(): string
+    /** Public so the gateway service can stamp its rows the same way. */
+    public function reference(): string
     {
         do {
             $reference = 'PAY-'.now()->format('ymd').'-'.Str::upper(Str::random(5));

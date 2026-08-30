@@ -7,6 +7,19 @@ use Illuminate\Database\Eloquent\Model;
 
 class PaymentMethod extends Model
 {
+    /**
+     * Methods a provider can be asked about after the fact.
+     *
+     * Cash on delivery and bank transfer are absent on purpose: nothing calls
+     * us when cash changes hands or a transfer lands, so those stay manual.
+     */
+    public const GATEWAY_CODES = ['esewa', 'khalti'];
+
+    public function isGateway(): bool
+    {
+        return in_array($this->code, self::GATEWAY_CODES, true);
+    }
+
     protected $fillable = [
         'code', 'name', 'instructions', 'logo', 'is_active', 'on_delivery_only',
         'supports_payout', 'requires_bank_name',
@@ -18,13 +31,13 @@ class PaymentMethod extends Model
     protected function casts(): array
     {
         return [
-            'config'           => 'array',
-            'is_active'        => 'boolean',
+            'config' => 'array',
+            'is_active' => 'boolean',
             'on_delivery_only' => 'boolean',
-            'supports_payout'  => 'boolean',
+            'supports_payout' => 'boolean',
             'requires_bank_name' => 'boolean',
             'requires_advance' => 'boolean',
-            'advance_amount'   => 'decimal:2',
+            'advance_amount' => 'decimal:2',
         ];
     }
 
@@ -53,16 +66,31 @@ class PaymentMethod extends Model
             return false;
         }
 
+        /*
+         * A gateway with no credentials cannot open a payment at all, so
+         * offering it only produces an order nobody can pay for -- which is
+         * exactly what it did: the buyer got as far as the order page and met
+         * a payment that could never start.
+         */
+        if ($this->isGateway() && ! $this->isGatewayConfigured()) {
+            return false;
+        }
+
         return ! $this->on_delivery_only || ! static::hasAnyCheckoutMethod();
     }
 
     /** Is there anything a buyer can actually place an order with? */
     public static function hasAnyCheckoutMethod(): bool
     {
+        // Filtered in PHP rather than SQL: whether a gateway is usable lives in
+        // the environment, not in a column. Cash on delivery falls back to
+        // being selectable when this is false, so an unconfigured gateway must
+        // not count as a way to place an order.
         return static::query()
             ->where('is_active', true)
             ->where('on_delivery_only', false)
-            ->exists();
+            ->get()
+            ->contains(fn (self $method) => ! $method->isGateway() || $method->isGatewayConfigured());
     }
 
     /** Why it is greyed out at checkout, or null when it is not. */
@@ -70,6 +98,10 @@ class PaymentMethod extends Model
     {
         if ($this->isCheckoutSelectable()) {
             return null;
+        }
+
+        if ($this->isGateway() && ! $this->isGatewayConfigured()) {
+            return $this->name.' is not available at the moment. Please choose another way to pay.';
         }
 
         return 'Not a way to place an order. Choose how to pay up front below, and settle '
@@ -100,8 +132,31 @@ class PaymentMethod extends Model
      */
     public function isPrepayable(): bool
     {
-        return $this->is_active
-            && (filled($this->payee_account_number) || filled($this->payee_qr_image));
+        if (! $this->is_active) {
+            return false;
+        }
+
+        /*
+         * A gateway needs no account to send money to -- it collects the money
+         * itself and tells us afterwards. What it does need is credentials, and
+         * a method that cannot actually start a payment should not be offered
+         * at checkout at all: better absent than failing at the last step.
+         */
+        if ($this->isGateway()) {
+            return $this->isGatewayConfigured();
+        }
+
+        return filled($this->payee_account_number) || filled($this->payee_qr_image);
+    }
+
+    /** Whether this gateway has enough in the environment to be usable. */
+    public function isGatewayConfigured(): bool
+    {
+        return match ($this->code) {
+            'esewa' => filled(config('services.esewa.product_code')) && filled(config('services.esewa.secret')),
+            'khalti' => filled(config('services.khalti.secret_key')),
+            default => false,
+        };
     }
 
     /**
@@ -162,11 +217,21 @@ class PaymentMethod extends Model
             return null;
         }
 
+        /*
+         * A gateway has no account for the buyer to send to -- it collects the
+         * money itself and tells us afterwards. Showing an account number here
+         * would invite exactly the hand-made transfer the integration exists to
+         * replace, and that payment would then have to be checked by a person.
+         */
+        if ($this->isGateway()) {
+            return null;
+        }
+
         return array_filter([
-            'account_name'   => $this->payee_account_name,
+            'account_name' => $this->payee_account_name,
             'account_number' => $this->payee_account_number,
-            'bank_name'      => $this->payee_bank_name,
-            'qr'             => $this->payee_qr_url,
+            'bank_name' => $this->payee_bank_name,
+            'qr' => $this->payee_qr_url,
         ], fn ($value) => filled($value));
     }
 }

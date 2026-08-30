@@ -618,7 +618,20 @@ button:disabled { cursor: not-allowed; }
   background: linear-gradient(160deg, var(--surface) 0%, #fff 60%);
   overflow: hidden;
 }
-.hero__inner { position: relative; z-index: 2; padding-block: clamp(2.5rem, 6vw, 4.5rem); }
+/*
+ * Tighter above than below.
+ *
+ * 72px on the top edge pushed the hero's own call to action off the bottom of
+ * a laptop screen -- measured at 1366x643, "Browse goats" ended at 649px --
+ * and opened the page 99px below the header, further down than any other page
+ * starts. Matched above to the figure the rest of the site now opens at, while
+ * the underside keeps its full measure so the hero still ends generously.
+ */
+.hero__inner {
+  position: relative;
+  z-index: 2;
+  padding-block: clamp(1.5rem, 4vw, 2.75rem) clamp(2.5rem, 6vw, 4.5rem);
+}
 .hero__title {
   font-size: clamp(2rem, 4.6vw, 3.25rem);
   font-weight: 700;
@@ -837,6 +850,12 @@ button:disabled { cursor: not-allowed; }
   aspect-ratio: 4 / 3;
   background: var(--surface);
   overflow: hidden;
+
+  /* The badges have to answer to the width of the card, not the window. The
+     grid changes column count at its own breakpoints, so a 992px window can
+     hand out narrower cards than a 768px one -- a viewport query would get
+     both of those wrong. */
+  container-type: inline-size;
 }
 .card-goat__media img {
   width: 100%;
@@ -851,11 +870,43 @@ button:disabled { cursor: not-allowed; }
   position: absolute;
   top: .625rem;
   left: .625rem;
+
+  /* Stops short of the wishlist button rather than running to the card edge:
+     38px of button, its own .625rem inset, and .5rem of clearance. Without the
+     right-hand bound, a discounted card's second badge would slide underneath
+     the heart -- which is what a plain row buys in exchange for the stack. */
+  right: calc(38px + .625rem + .5rem);
+
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: .375rem;
   align-items: flex-start;
   z-index: 2;
+}
+
+/*
+ * A discount and a full "Vet checked" need about 162px side by side, and the
+ * wishlist button takes another 62 off the card. Under roughly 240px of card
+ * there is no room for all three, so the vet badge gives up its wording rather
+ * than the row: the tick still reads at a glance, and the label is only
+ * clipped, so screen readers still announce it.
+ */
+@container (max-width: 239px) {
+  .card-goat__tags .badge-verified {
+    gap: 0;
+    padding-inline: .4rem;
+  }
+
+  .card-goat__tags .badge-verified__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .card-goat__wish {
@@ -961,6 +1012,26 @@ button:disabled { cursor: not-allowed; }
 .pagehead + .section-tight { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 
 /*
+ * A page that opens straight into its content, with no header band above it.
+ *
+ * Seventeen of the site's twenty-seven routes have no .pagehead -- the account
+ * area, the cart, checkout, the auth screens, the seller dashboard -- so the
+ * rule above never matched for any of them, and .section's full 72px of top
+ * padding landed directly under the site header as empty space, with the
+ * page's own title sitting far below where every other page puts one.
+ *
+ * Matched to a page header's own top padding, so an h1 here sits at the height
+ * a page title sits at everywhere else.
+ *
+ * Keyed on position rather than a modifier class, because seventeen routes is
+ * seventeen chances to forget one, and a page added tomorrow should not have to
+ * know about this. A page that does open with a .pagehead, a .hero or an
+ * <article> is not this selector's first child and is left alone.
+ */
+main > .section:first-child { padding-top: clamp(1.5rem, 4vw, 2.75rem); }
+main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
+
+/*
  * Same double-count under a hero, only wider: the hero's inner container ends
  * with 72px of its own, and the section below opened with another 72px. The
  * hero is already the more generous of the two, so the section stands down
@@ -968,6 +1039,126 @@ button:disabled { cursor: not-allowed; }
  */
 .hero + .section { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 .hero + .section-tight { padding-top: clamp(.75rem, 2vw, 1.25rem); }
+
+/*
+ * ── Article hero ──────────────────────────────────────────
+ *
+ * The one page header that cannot borrow .pagehead. That is a light band, and
+ * eight other pages use it; a care guide opens on its own cover photograph,
+ * and white type over an arbitrary photograph needs a scrim of its own.
+ *
+ * The scrim is graded rather than flat. A flat wash -- what this was, at 65%
+ * across the whole frame -- dulls the picture everywhere in order to protect
+ * text that only ever sits along the bottom edge. Weighting it downwards keeps
+ * the photograph readable at the top and puts the contrast where the words are.
+ */
+.posthead {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: clamp(300px, 38vw, 440px);
+  padding: clamp(2.5rem, 6vw, 4rem) 0 clamp(1.75rem, 3vw, 2.5rem);
+  background: var(--ink) linear-gradient(135deg, var(--brand-primary) 0%, var(--ink) 100%);
+  color: #fff;
+  overflow: hidden;
+}
+
+.posthead--cover {
+  background: var(--ink) var(--posthead-image, none) center / cover no-repeat;
+}
+
+/*
+ * Two scrims, not one. The vertical pass protects the bottom edge where the
+ * meta line sits; the horizontal pass protects the left column, because the
+ * title and deck have to stay readable over whatever happens to be in that
+ * corner of the photograph -- here, a sunlit white building.
+ */
+.posthead--cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 24, 15, .78) 0%,
+      rgba(8, 24, 15, .48) 38%,
+      rgba(8, 24, 15, 0) 72%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(8, 24, 15, .18) 0%,
+      rgba(8, 24, 15, .46) 48%,
+      rgba(8, 24, 15, .84) 100%
+    );
+}
+
+.posthead > .container { position: relative; z-index: 1; width: 100%; }
+
+.posthead__crumbs { margin-bottom: 1rem; }
+.posthead__crumbs .breadcrumb-item a { color: rgba(255, 255, 255, .76); text-decoration: none; }
+.posthead__crumbs .breadcrumb-item a:hover { color: #fff; text-decoration: underline; }
+.posthead__crumbs .breadcrumb-item + .breadcrumb-item::before { color: rgba(255, 255, 255, .45); }
+
+.posthead__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: .375rem .8125rem;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .14);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-family: var(--font-heading), sans-serif;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background-color var(--speed) var(--ease);
+}
+.posthead__chip:hover { background: rgba(255, 255, 255, .26); color: #fff; }
+
+.posthead__title {
+  max-width: 20ch;
+  margin: .875rem 0 0;
+  font-size: clamp(1.75rem, 3.6vw, 2.75rem);
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, .3);
+}
+
+/*
+ * The excerpt reads as a deck here. It used to open the article body, one line
+ * above a first paragraph making the same point in more words.
+ */
+.posthead__deck {
+  max-width: 56ch;
+  margin: .875rem 0 0;
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, .88);
+}
+
+.posthead__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .875rem;
+  margin-top: 1.25rem;
+  font-size: .8125rem;
+  color: rgba(255, 255, 255, .8);
+}
+.posthead__dot {
+  width: 3px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .45);
+}
+
+@media (max-width: 575.98px) {
+  .posthead__title { max-width: none; }
+}
 
 .crumbs { font-size: .8125rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: .375rem; align-items: center; }
 .crumbs a { color: var(--muted); }
@@ -1079,26 +1270,77 @@ button:disabled { cursor: not-allowed; }
 }
 
 /* ── Product detail ──────────────────────────────────────── */
+/*
+ * One grid, not two stacked rows. Two rows meant the description could not
+ * start until the tallest column of the row above it had finished, so a short
+ * gallery beside a long buy column left a crater under the thumbnails. Here
+ * the buy column spans both tracks instead and the description sits directly
+ * under the gallery. Stacked on a phone the source order still reads
+ * gallery, then price and CTA, then the long detail -- the order a buyer wants.
+ */
+.product-layout { display: grid; gap: var(--space-xl); }
+
+@media (min-width: 992px) {
+  .product-layout {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    column-gap: clamp(1.75rem, 3vw, 3rem);
+    row-gap: var(--space-2xl);
+    align-items: start;
+  }
+  .product-layout__media { grid-column: 1; grid-row: 1; }
+  .product-layout__detail { grid-column: 1; grid-row: 2; }
+  /* Stretched rather than start-aligned: a sticky element can only travel
+     inside its own box, so the buy box needs the height of both rows to
+     move in. */
+  .product-layout__buy {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+  }
+}
+
 .gallery__main {
+  position: relative;
   aspect-ratio: 4 / 3;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
 }
 .gallery__main img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Says how many photos there are before the eye reaches the strip below. */
+.gallery__count {
+  position: absolute;
+  right: var(--space-md);
+  bottom: var(--space-md);
+  padding: .25rem .625rem;
+  border-radius: var(--radius-pill);
+  background: rgba(17, 24, 20, .62);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+/* A wrapping strip of fixed-size thumbs, not a five-column grid: two photos
+   then read as two photos rather than as three empty cells. */
+.gallery__strip { display: flex; flex-wrap: wrap; gap: .625rem; }
+
 .gallery__thumb {
   aspect-ratio: 1;
-  width: 100%;
+  width: clamp(66px, 7.5vw, 88px);
+  flex: 0 0 auto;
   padding: 0;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 2px solid transparent;
   background: var(--surface);
-  transition: border-color var(--speed) var(--ease);
+  transition: border-color var(--speed) var(--ease), transform var(--speed) var(--ease);
 }
 .gallery__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gallery__thumb:hover { border-color: var(--line-strong); transform: translateY(-2px); }
 .gallery__thumb.is-active { border-color: var(--brand-primary); }
 
 /* Sticky buy box keeps the price and CTA in view while reading specs. */
@@ -1130,6 +1372,21 @@ button:disabled { cursor: not-allowed; }
 }
 .spec-cell dt { font-size: .75rem; color: var(--muted); margin-bottom: .125rem; }
 .spec-cell dd { margin: 0; font-weight: 600; color: var(--ink); font-size: .9375rem; }
+
+/* The full spec table sits in the wide column now, so it runs two abreast on
+   anything above a phone instead of leaving half the width empty. */
+.spec-list { display: grid; column-gap: var(--space-2xl); }
+@media (min-width: 576px) { .spec-list { grid-template-columns: 1fr 1fr; } }
+.spec-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: .625rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.spec-list dt { font-weight: 400; color: var(--muted); }
+.spec-list dd { margin: 0; font-weight: 600; color: var(--ink); text-align: right; }
 
 .qty {
   display: inline-flex;
@@ -1289,12 +1546,138 @@ button:disabled { cursor: not-allowed; }
 @keyframes riseIn { from { transform: translateY(10px); } to { transform: none; } }
 .rise { animation: riseIn 340ms var(--ease) backwards; }
 
-/* ── Rich text ───────────────────────────────────────────── */
+/* ── Sign in and sign up ─────────────────────────────────── */
+
+/*
+ * The rule between the password form and the Google button.
+ *
+ * A plain <hr> would read as the form having ended. This reads as what it is:
+ * the same thing, offered another way.
+ */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin: var(--space-md) 0;
+  color: var(--muted);
+  font-size: .8125rem;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/*
+ * Google draws the "I'm not a robot" widget inside this box at a fixed
+ * 304x78, and its look is not ours to change. Centred in the form, with the
+ * height held while the script loads so the submit button below does not jump
+ * down the page as it appears.
+ */
+.recaptcha {
+  display: flex;
+  justify-content: center;
+  min-height: 78px;
+}
+.recaptcha.is-disabled {
+  opacity: .6;
+  pointer-events: none;
+}
+
+/*
+ * Google renders its own button inside this box and owns how it looks -- their
+ * branding rules come with it, and it is the button people already recognise.
+ * This only centres it and holds the height while the script loads, so the form
+ * does not jump.
+ */
+.google-button {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+}
+.google-button.is-disabled {
+  opacity: .6;
+  pointer-events: none;
+}
+
+/*
+ * ── Rich text ─────────────────────────────────────────────
+ *
+ * Everything an admin can produce in the Filament editor has to land here
+ * looking deliberate, because nobody writing a care guide should have to think
+ * about CSS. The vocabulary is fixed by what that editor round-trips:
+ * headings, paragraphs, lists, blockquotes, tables and links. Each is styled
+ * below, and nothing outside it can reach the page.
+ *
+ * Headings are sized down from the Bootstrap defaults. A guide sits under an
+ * h1 in the page head, so its own h2 has to read as a section inside an
+ * article rather than compete with the title above it.
+ */
 .prose { line-height: 1.75; color: var(--body); }
-.prose h2, .prose h3 { margin-top: 2rem; margin-bottom: .75rem; }
+.prose > :first-child { margin-top: 0; }
+.prose h2, .prose h3 { color: var(--ink); margin-bottom: .75rem; }
+.prose h2 { font-size: clamp(1.25rem, 2.2vw, 1.5rem); margin-top: 2.25rem; }
+.prose h3 { font-size: 1.0625rem; margin-top: 1.75rem; }
+.prose h2 + h3 { margin-top: 1.25rem; }
 .prose p { margin-bottom: 1rem; }
 .prose ul, .prose ol { margin-bottom: 1rem; padding-left: 1.25rem; }
+.prose li { margin-bottom: .375rem; }
+.prose li:last-child { margin-bottom: 0; }
+.prose strong { color: var(--ink); font-weight: 600; }
 .prose a { text-decoration: underline; }
+.prose hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+
+.prose blockquote {
+  margin: 1.5rem 0;
+  padding: var(--space-md) var(--space-lg);
+  border-left: 3px solid var(--brand-secondary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--surface-alt);
+  color: var(--ink);
+}
+.prose blockquote p:last-child { margin-bottom: 0; }
+
+/*
+ * Fixed layout, not auto.
+ *
+ * Auto sizes each column to its widest cell, which on these tables produced a
+ * 349px column of prose beside a 66px column holding a single digit, and a
+ * 108/545 split on another. The reader cannot scan a grid whose columns are
+ * sized by accident. Fixed gives even columns from the header row down, and
+ * means an admin adding a table in Filament gets a sane one without having to
+ * think about widths.
+ */
+.prose table {
+  width: 100%;
+  margin: 1.5rem 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: .9375rem;
+}
+.prose th,
+.prose td {
+  padding: .625rem .75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.prose th {
+  background: var(--surface-alt);
+  border-bottom-color: var(--line-strong);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/*
+ * A table cannot be wrapped in a scroller here -- the editor would strip the
+ * wrapper on the next save -- so the table becomes its own scroll container on
+ * phones. It stays a real table above that breakpoint, where it fits.
+ */
+@media (max-width: 575.98px) {
+  .prose table { display: block; overflow-x: auto; }
+}
 
 /*
  * A page's body copy, aligned with the title above it.
@@ -1306,6 +1689,75 @@ button:disabled { cursor: not-allowed; }
  * measured in words.
  */
 .prose--page { max-width: 68ch; }
+
+/*
+ * A care guide's column, and everything that shares its edge -- the copy, the
+ * rule under it, the button after that.
+ *
+ * Same fix as .prose--page above, for the same reason: the article was a
+ * centred col-lg-8 under a full-bleed hero, so its first word sat 186px right
+ * of the title and its lines ran to 78 characters. The measure lives on this
+ * wrapper rather than on .prose so the footer keeps the column edge instead of
+ * running the width of the container.
+ */
+.article__body { max-width: 68ch; }
+
+/*
+ * Long-form type. A guide is two thousand words read straight through, which
+ * wants a little more size and air than a short CMS page does -- hence the
+ * modifier rather than raising .prose for everything that uses it.
+ */
+.prose--article { font-size: 1.0625rem; }
+
+/* The opening paragraph carries the weight of a standfirst without being one. */
+.prose--article > p:first-of-type {
+  font-size: 1.1875rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* Clears the sticky header when the rail jumps to a section. */
+.prose--article h2 { scroll-margin-top: 104px; }
+
+/*
+ * The section rail. Sticky from the large breakpoint up, on the same offset as
+ * .page-aside so the two read as one idea rather than two.
+ */
+.article__toc {
+  position: sticky;
+  top: 104px;
+  padding: var(--space-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-alt);
+}
+
+.article__toc-title {
+  margin-bottom: var(--space-md);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.article__toc ol { list-style: none; margin: 0; padding: 0; }
+.article__toc li + li { margin-top: .25rem; }
+
+.article__toc a {
+  display: block;
+  padding: .25rem 0 .25rem .75rem;
+  border-left: 2px solid var(--line);
+  color: var(--body);
+  font-size: .875rem;
+  line-height: 1.45;
+  text-decoration: none;
+  transition: color var(--speed) var(--ease), border-color var(--speed) var(--ease);
+}
+.article__toc a:hover {
+  border-left-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
 
 /*
  * The picture beside a page's copy.
@@ -1395,6 +1847,269 @@ button:disabled { cursor: not-allowed; }
 .spinner-border { color: currentColor; }
 
 .nav-link:focus-visible, .navlink:focus-visible { outline-offset: -2px; }
+
+/*
+ * Let grid and flex children shrink.
+ *
+ * Both default their items to `min-width: auto`, meaning an item refuses to
+ * become narrower than its own content. So a 510px table inside a panel does
+ * not trigger the panel's `.table-responsive` scroller: it widens the panel
+ * to 560px instead, and that pushes past a 366px column and gets clipped at
+ * the screen edge.
+ *
+ * Setting the floor to 0 lets the item narrow to its container, which is what
+ * finally lets the table scroll inside itself the way it was always meant to.
+ * On a wide screen nothing here has anything to do, because nothing is being
+ * squeezed.
+ */
+.row > *,
+.d-grid > *,
+.panel { min-width: 0; }
+
+/* ── Touch ergonomics ────────────────────────────────────── */
+/*
+ * Sized for a fingertip, not a cursor.
+ *
+ * Gated on `pointer: coarse` first, because the thing that decides how big a
+ * target needs to be is what is pointing at it: a touch laptop at 1400px
+ * needs these. The width clause is a fallback, since some Android browsers
+ * report `fine` for a finger. It reaches 1024px because that is iPad Pro
+ * portrait, the widest thing anyone holds. A mouse on a desktop gets neither.
+ *
+ * 44px is the figure both Apple and Google publish, and the audit found the
+ * storefront sitting at 38px for every Add to cart, every wishlist heart and
+ * the search button, with the carousel dots at 8px.
+ */
+/* ---------------------------------------------------------------- checkout */
+
+.checkout__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-lg);
+}
+
+/*
+ * The progress rail. Each step carries the connector that leads into it, so a
+ * line fills at the moment the step it points at is reached -- one rule, no
+ * bookkeeping about which segment belongs to which pair.
+ */
+.steps {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-lg);
+}
+
+.steps__item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.steps__item + .steps__item { flex: 1 1 auto; }
+
+.steps__item + .steps__item::before {
+  content: '';
+  flex: 1 1 auto;
+  min-width: 1rem;
+  height: 2px;
+  margin: 0 .5rem;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background var(--speed) var(--ease);
+}
+
+.steps__item.is-done::before,
+.steps__item.is-current::before { background: var(--brand-primary); }
+
+.steps__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: .9375rem;
+  white-space: nowrap;
+}
+
+.steps__btn:disabled { cursor: default; }
+
+.steps__dot {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--muted);
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.steps__item.is-current .steps__dot {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  box-shadow: 0 0 0 4px rgba(21, 128, 61, .12);
+}
+
+.steps__item.is-done .steps__dot {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: var(--white);
+}
+
+.steps__item.is-current .steps__btn,
+.steps__item.is-done .steps__btn { color: var(--ink); }
+
+/* Under the total, where the amount being committed to is still in view. */
+.checkout__nav {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.review__block {
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+}
+
+.review__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: .375rem;
+}
+
+@media (min-width: 992px) {
+  /* The running total stays in view while the steps change beside it. */
+  .checkout__aside { position: sticky; top: 88px; }
+}
+
+/*
+ * Below roughly 420px the three labels stop fitting next to their dots. The
+ * step you are on is the only one that still has to name itself; the others
+ * are legible as done or not from the dot alone.
+ */
+@media (max-width: 419.98px) {
+  .steps__item:not(.is-current) .steps__label { display: none; }
+}
+
+@media (pointer: coarse), (max-width: 1024.98px) {
+
+  /* Buttons and inputs: the floor, applied without touching the visual size
+     of anything that was already big enough. */
+  .btn { min-height: 44px; }
+  .form-control, .form-select { min-height: 44px; }
+
+  .icon-btn { width: 44px; height: 44px; }
+
+  .searchbar { padding-left: 1rem; }
+  .searchbar input { min-height: 44px; }
+  .searchbar__go { width: 44px; height: 44px; }
+
+  /* One per card, sitting over a photo: easy to miss, and missing it means
+     tapping through to the goat instead. */
+  .card-goat__wish { width: 44px; height: 44px; }
+
+  /* The badges keep clear of the button at whichever size it is. */
+  .card-goat__tags { right: calc(44px + .625rem + .5rem); }
+
+  .chip { min-height: 44px; padding-block: .625rem; }
+
+  /*
+   * The dots were 8px of tappable area. The dot stays 8px; the target around
+   * it grows to 44 with transparent padding, so the control gets easier to
+   * hit without the design getting heavier.
+   */
+  .carousel-hero__dots { gap: 0; }
+  .carousel-hero__dot {
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border-radius: 0;
+    display: grid;
+    place-items: center;
+  }
+  .carousel-hero__dot::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--line-strong);
+    transition: width var(--speed) var(--ease), background-color var(--speed) var(--ease);
+  }
+  /* Beats the unscoped `.is-active { width: 28px }` above: the pill that
+     shows which slide you are on moves to the ::after, so the button itself
+     can stay a full 44 wide like its neighbours. */
+  .carousel-hero__dot.is-active { width: 44px; background: transparent; }
+  .carousel-hero__dot.is-active::after { width: 28px; background: var(--brand-primary); }
+
+  /*
+   * Footer and menu lists sat at 20px a row with the rows nearly touching,
+   * which is where mis-taps come from: not the size of one link, but the
+   * distance to the wrong one.
+   */
+  .footer a { display: inline-block; padding-block: .6875rem; }
+  .crumbs a { padding-block: .25rem; }
+
+  /* The account and seller side menus, and the Sign out button that sits at
+     the bottom of them: 40px is close enough to look right and just short
+     enough to miss. */
+  .navlink { min-height: 44px; }
+
+  /* Category rows in the shop filter. A whole row is the target, so it is
+     easy to assume it is big enough; it was 40. */
+  .filter-option { min-height: 44px; }
+
+  /* Bootstrap sizes badges in em, so one nested in already-small text lands
+     at 10.5px. An absolute floor keeps them readable on a phone. */
+  .badge { font-size: .75rem; }
+
+  /* Account menu rows. They escape the header fine, they were just thin. */
+  .dropdown-item { min-height: 44px; display: flex; align-items: center; }
+
+  /* Bootstrap's close button is 32px, and it is the only way back out of the
+     filter drawer, so it is the worst one to have to aim at. */
+  .btn-close { width: 44px; height: 44px; background-size: 14px; }
+
+  /*
+   * Checkboxes and radios ship at 16px, which is a third of a fingertip. The
+   * box grows, and the label beside it gets room too, since people aim at the
+   * words as often as the box.
+   */
+  .form-check-input { width: 22px; height: 22px; margin-top: .125rem; }
+  .form-check { min-height: 44px; padding-left: 2rem; display: flex; align-items: center; }
+  .form-check .form-check-input { margin-left: -2rem; }
+  .form-check-label { padding-block: .5rem; }
+
+  /*
+   * The weight and price sliders. A control you drag rather than tap needs the
+   * room even more than a button does: at 24px tall the thumb was smaller than
+   * the fingertip moving it, so the drag started on the track instead.
+   *
+   * The track keeps its slim look; the height goes into transparent padding
+   * around it, and the thumb itself grows.
+   */
+  .form-range {
+    height: 44px;
+    padding-block: 10px;
+    background: transparent;
+  }
+  .form-range::-webkit-slider-thumb { width: 26px; height: 26px; }
+  .form-range::-moz-range-thumb { width: 26px; height: 26px; }
+}
 
 /* ── Testimonial marquee ─────────────────────────────────── */
 /*
@@ -1501,4 +2216,110 @@ button:disabled { cursor: not-allowed; }
 
 @media (prefers-reduced-motion: reduce) {
   .to-top { transition: opacity var(--speed) var(--ease), visibility 0s linear var(--speed); transform: none; }
+}
+
+/* ==========================================================================
+   Preloader
+   --------------------------------------------------------------------------
+   Logo centred, a hairline track beneath it, and a bar that fills from the
+   left edge to the right. The overlay is painted in the site's own surface
+   colour rather than a dark curtain: the uploaded logo is black artwork on a
+   transparent background, so anything dark behind it would hide the mark it
+   exists to show.
+
+   The bar is the brand colour, the track the same hairline used for every
+   other rule on the page, so the splash reads as part of the site and not as
+   a third-party widget in front of it.
+   ========================================================================== */
+
+:root {
+  /* Mirrored by FILL_MS in components/layout/Preloader.js. */
+  --preloader-fill: 1100ms;
+}
+
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 2000; /* Above the sticky header (1040) and Bootstrap's overlays. */
+  display: grid;
+  place-items: center;
+  background: var(--white);
+
+  /* Visibility rides along so the faded-out overlay stops taking clicks
+     immediately, in the frame before React unmounts it. */
+  transition: opacity 450ms var(--ease), visibility 0s linear 450ms;
+}
+
+.preloader.is-done {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* The page behind must not scroll under the curtain. */
+body.has-preloader { overflow: hidden; }
+
+.preloader__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: var(--space-lg);
+}
+
+.preloader__logo {
+  display: block;
+  height: 96px;
+  width: auto;
+  max-width: min(260px, 70vw);
+  object-fit: contain;
+}
+
+/* Only reached when no logo has been uploaded; mirrors the masthead's own
+   fallback so the splash never comes up empty. */
+.preloader__word {
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.75rem, 6vw, 2.75rem);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.preloader__track {
+  position: relative;
+  display: block;
+  width: min(190px, 60vw);
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.preloader__bar {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--brand-primary);
+
+  /* scaleX rather than width: it runs on the compositor, so the sweep stays
+     smooth while the browser is still busy parsing and painting the page. */
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: preloader-fill var(--preloader-fill) var(--ease) forwards;
+}
+
+@keyframes preloader-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@media (max-width: 575.98px) {
+  .preloader__logo { height: 72px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Show the finished state rather than sweeping to it. The overlay still
+     clears on load, so nothing is left stranded. */
+  .preloader__bar { animation: none; transform: scaleX(1); }
+  .preloader { transition: opacity 1ms linear, visibility 0s linear 1ms; }
 }

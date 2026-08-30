@@ -55,6 +55,19 @@ class OrderPaymentTest extends TestCase
             'approval_status' => 'approved',
         ]);
 
+        /*
+         * eSewa confirms itself now, so a buyer cannot declare one by hand.
+         * The cases below are about the declaring-and-confirming mechanism
+         * itself, which lives on with bank transfer -- the method that still
+         * has no provider to ask.
+         */
+        PaymentMethod::where('code', 'bank_transfer')->update([
+            'is_active'            => true,
+            'payee_account_name'   => 'Goat Haven Pvt Ltd',
+            'payee_account_number' => '0123456789',
+            'payee_bank_name'      => 'Nabil Bank',
+        ]);
+
         // An admin has given eSewa an account for buyers to send money to.
         PaymentMethod::where('code', 'esewa')->update([
             'is_active' => true,
@@ -190,10 +203,24 @@ class OrderPaymentTest extends TestCase
         // Cash on delivery has no account to send to, so it is not offered.
         $this->assertNotContains('cod', $codes);
 
+        /*
+         * Two kinds of answer to "where do I send it".
+         *
+         * A manual method answers with an account. A gateway answers by taking
+         * the buyer to the provider, so it deliberately carries no account --
+         * printing one would invite the hand-made transfer, and the hand
+         * checking, that the integration exists to remove.
+         */
+        $bank = collect($payment['methods'])->firstWhere('code', 'bank_transfer');
+
+        $this->assertFalse($bank['is_gateway']);
+        $this->assertSame('0123456789', $bank['payee']['account_number']);
+        $this->assertSame('Goat Haven Pvt Ltd', $bank['payee']['account_name']);
+
         $esewa = collect($payment['methods'])->firstWhere('code', 'esewa');
 
-        $this->assertSame('9800000000', $esewa['payee']['account_number']);
-        $this->assertSame('Goat Haven Pvt Ltd', $esewa['payee']['account_name']);
+        $this->assertTrue($esewa['is_gateway']);
+        $this->assertNull($esewa['payee']);
     }
 
     public function test_a_buyer_can_declare_a_payment_and_staff_must_confirm_it(): void
@@ -201,7 +228,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
             'transaction_reference' => 'ESW-99887766',
         ])->assertCreated()->json('data.reference');
@@ -264,7 +291,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => (float) $order->total + 5000,
         ])->assertStatus(422)->assertJsonValidationErrors('amount');
     }
@@ -277,7 +304,7 @@ class OrderPaymentTest extends TestCase
         Sanctum::actingAs($stranger);
 
         $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => 100,
         ])->assertNotFound();
     }
@@ -304,7 +331,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
             'transaction_reference' => 'ESW-12341234',
         ])->assertCreated()->json('data.reference');
@@ -417,11 +444,19 @@ class OrderPaymentTest extends TestCase
         // the money is still owed, there is just nowhere to send it.
         $order = $this->placeOrder();
 
+        /*
+         * Taking the account away is no longer enough on its own: a gateway
+         * needs no account to send money to, so it would still be a way to
+         * pay. Nowhere to pay now means no account and no gateway either.
+         */
         PaymentMethod::query()->update([
             'payee_account_name'   => null,
             'payee_account_number' => null,
             'payee_qr_image'       => null,
         ]);
+
+        PaymentMethod::whereIn('code', PaymentMethod::GATEWAY_CODES)
+            ->update(['is_active' => false]);
 
         $order->update(['status' => 'out_for_delivery']);
 
@@ -467,7 +502,7 @@ class OrderPaymentTest extends TestCase
         $order->update(['status' => 'out_for_delivery']);
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
             'transaction_reference' => 'ESW-55556666',
         ])->assertCreated()->json('data.reference');
@@ -548,7 +583,7 @@ class OrderPaymentTest extends TestCase
         $this->assertFalse($before['awaiting_check']);
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
             'transaction_reference' => 'ESW-0011EF7K',
         ])->assertCreated()->json('data.reference');
@@ -563,7 +598,7 @@ class OrderPaymentTest extends TestCase
 
         // Hiding the form is not the guard — the API refuses a repeat too.
         $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
         ])->assertStatus(422)->assertJsonValidationErrors('amount');
 
@@ -589,7 +624,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
         ])->assertCreated()->json('data.reference');
 
@@ -614,7 +649,7 @@ class OrderPaymentTest extends TestCase
         $this->assertSame('pending', $order->status);
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
             'transaction_reference' => 'ESW-0011EF7K',
         ])->assertCreated()->json('data.reference');
@@ -642,7 +677,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
         ])->assertCreated()->json('data.reference');
 
@@ -706,7 +741,7 @@ class OrderPaymentTest extends TestCase
             ->assertTableColumnStateSet('status', 'pending', $order);
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
         ])->assertCreated()->json('data.reference');
 
@@ -738,7 +773,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
             'transaction_reference' => 'ESW-778899',
             'proof' => UploadedFile::fake()->image('receipt.png'),
@@ -771,7 +806,7 @@ class OrderPaymentTest extends TestCase
         $order = $this->placeOrder();
 
         $reference = $this->postJson('/api/v1/orders/'.$order->order_number.'/payments', [
-            'method' => 'esewa',
+            'method' => 'bank_transfer',
             'amount' => $order->total,
         ])->assertCreated()->json('data.reference');
 

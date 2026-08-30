@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch, toFormData } from '@/lib/api';
 import { formatDateTime, formatMoney } from '@/lib/format';
+import { payThroughGateway } from '@/lib/gateway';
 
 const STATUS_STYLE = {
   pending: 'text-bg-warning',
@@ -45,8 +46,33 @@ export default function OrderPayment({ order, onPaid }) {
   const [proof, setProof] = useState(null);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const chosen = methods.find((entry) => entry.code === method);
+
+  /**
+   * Hand the buyer to the provider. There is no form to fill in afterwards:
+   * whether the money arrived is settled between our server and theirs.
+   */
+  const startGateway = async () => {
+    setStarting(true);
+    setErrors({});
+
+    try {
+      const result = await payThroughGateway(order.order_number, method, token);
+
+      // Only returns at all when there was nothing left to pay -- otherwise
+      // the browser has already left for the provider.
+      if (result.settled) {
+        toast.success('That payment had already gone through.');
+        onPaid?.();
+      }
+    } catch (error) {
+      setErrors(error.errors || {});
+      toast.error(error.errors?.method?.[0] || error.message || 'Could not open the payment page.');
+      setStarting(false);
+    }
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -215,8 +241,9 @@ export default function OrderPayment({ order, onPaid }) {
           </>
         )}
 
-        Send the money using any of the accounts below, then tell us about it. We check every
-        payment by hand before the goat goes out.
+        {chosen?.is_gateway
+          ? 'Pay with the button below and we will know the moment it clears — there is nothing to send us afterwards.'
+          : 'Send the money using any of the accounts below, then tell us about it. We check every payment by hand before the goat goes out.'}
       </p>
 
       <div className="row g-2 mb-4">
@@ -248,7 +275,7 @@ export default function OrderPayment({ order, onPaid }) {
         ))}
       </div>
 
-      {chosen && (
+      {chosen && ! chosen.is_gateway && (
         <div className="alert alert-light border small">
           {chosen.instructions && <p className="mb-2">{chosen.instructions}</p>}
 
@@ -278,6 +305,31 @@ export default function OrderPayment({ order, onPaid }) {
         </div>
       )}
 
+      {chosen?.is_gateway && (
+        <div className="panel bg-surface">
+          {chosen.instructions && <p className="small text-soft mb-3">{chosen.instructions}</p>}
+
+          <button
+            type="button"
+            className="btn btn-brand btn-lg px-4"
+            onClick={startGateway}
+            disabled={starting}
+          >
+            {starting
+              ? 'Opening ' + chosen.name + '…'
+              : 'Pay ' + formatMoney(payment.amount_due_now, settings) + ' with ' + chosen.name}
+          </button>
+
+          {errors.method && <div className="text-danger small mt-2">{errors.method[0]}</div>}
+
+          <p className="small text-soft mb-0 mt-3">
+            You will be taken to {chosen.name} and brought straight back here. Nothing is taken
+            until you confirm it there.
+          </p>
+        </div>
+      )}
+
+      {chosen && ! chosen.is_gateway && (
       <form onSubmit={submit} className="row g-3 mt-1">
         <div className="col-md-4">
           <label className="form-label" htmlFor="pay_amount">
@@ -341,6 +393,7 @@ export default function OrderPayment({ order, onPaid }) {
           </button>
         </div>
       </form>
+      )}
 
       {history.length > 0 && (
         <div className="mt-4 pt-3 border-top">

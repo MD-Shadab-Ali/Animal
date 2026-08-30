@@ -236,7 +236,7 @@ export default function ListingForm({ listing = null }) {
         </p>
 
         {images.length > 0 && (
-          <div className="row row-cols-3 row-cols-md-4 g-2 mb-3">
+          <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 g-2 mb-3">
             {images.map((image, index) => (
               <div className="col" key={image.id}>
                 <div className="gallery__thumb position-relative" style={{ aspectRatio: '1' }}>

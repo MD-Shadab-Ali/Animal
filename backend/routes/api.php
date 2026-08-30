@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\CheckoutController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContentController;
+use App\Http\Controllers\Api\V1\GatewayPaymentController;
 use App\Http\Controllers\Api\V1\GoatController;
 use App\Http\Controllers\Api\V1\HomeController;
 use App\Http\Controllers\Api\V1\OrderController;
@@ -55,9 +56,42 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Where a payment provider sends the buyer back
+    |--------------------------------------------------------------------------
+    |
+    | Unauthenticated by necessity: the browser arrives from esewa.com.np or
+    | khalti.com carrying no token of ours. It is safe to leave open because
+    | the query string only names an attempt -- what actually happened is
+    | settled by asking the provider, server to server, before any money is
+    | recorded. Both providers may send the buyer here more than once, and
+    | the handler is written to be repeated.
+    |
+    */
+    Route::get('payments/{gateway}/return', [GatewayPaymentController::class, 'returned'])
+        ->where('gateway', 'esewa|khalti')
+        ->name('payments.return');
+
+    /*
+    |--------------------------------------------------------------------------
     | Guest-only auth
     |--------------------------------------------------------------------------
     */
+
+    /*
+     * Signing in through Google, for both the sign-in and the sign-up page.
+     *
+     * Kept out of the throttle:auth group on purpose. That limiter keys partly
+     * on the submitted email address, and this request carries none -- every
+     * Google sign-in on the site would share one bucket of five a minute. Its
+     * own limiter keys on the IP instead.
+     *
+     * No robot check here either: arriving with a Google ID token has already
+     * proved there is a person on the other end.
+     */
+    Route::post('auth/google', [AuthController::class, 'google'])
+        ->middleware('throttle:google-auth')
+        ->name('auth.google');
+
     Route::middleware('throttle:auth')->group(function () {
         Route::post('auth/register', [AuthController::class, 'register'])->name('auth.register');
         Route::post('auth/login', [AuthController::class, 'login'])->name('auth.login');
@@ -105,6 +139,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('orders/{orderNumber}/payments', [OrderController::class, 'pay'])
             ->middleware('throttle:public-forms')
             ->name('orders.pay');
+
+        // Opening an online payment. Same throttle as the manual claim it
+        // replaces -- a burst of these means something is wrong, not eager.
+        Route::post('orders/{orderNumber}/pay/{gateway}', [GatewayPaymentController::class, 'start'])
+            ->middleware('throttle:public-forms')
+            ->name('orders.pay.gateway');
         Route::post('orders/{orderNumber}/refunds', [OrderController::class, 'refund'])
             ->middleware('throttle:public-forms')
             ->name('orders.refund');

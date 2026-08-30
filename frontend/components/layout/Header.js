@@ -180,17 +180,26 @@ export default function Header({ site }) {
           </div>
         </div>
 
-        <MobileNav
-          navigation={navigation}
-          settings={settings}
-          isAuthenticated={isAuthenticated}
-          user={user}
-          isStaff={isStaff}
-          seller={seller}
-          isApprovedSeller={isApproved}
-          onLogout={logout}
-        />
       </header>
+
+      {/*
+       * Deliberately a sibling of the masthead, not a child of it.
+       * The header carries a backdrop-filter, and any of transform, filter or
+       * backdrop-filter on an ancestor makes that ancestor the containing block
+       * for position: fixed descendants. Nested inside, the drawer's top:0 and
+       * bottom:0 resolved against the 73px header instead of the viewport, so
+       * the menu opened as a sliver with ten links crammed into a 32px scroll.
+       */}
+      <MobileNav
+        navigation={navigation}
+        settings={settings}
+        isAuthenticated={isAuthenticated}
+        user={user}
+        isStaff={isStaff}
+        seller={seller}
+        isApprovedSeller={isApproved}
+        onLogout={logout}
+      />
     </>
   );
 }

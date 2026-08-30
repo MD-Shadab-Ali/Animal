@@ -4,6 +4,7 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import AnnouncementBar from '@/components/layout/AnnouncementBar';
 import ScrollToTop from '@/components/layout/ScrollToTop';
+import Preloader from '@/components/layout/Preloader';
 import { getSiteData, buildMetadata } from '@/lib/site';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
@@ -50,6 +51,12 @@ export default async function RootLayout({ children }) {
     <html lang="en" className={`${heading.variable} ${body.variable}`}>
       <head>
         <style dangerouslySetInnerHTML={{ __html: theme }} />
+
+        {/* Only script can take the splash down, so without script it must
+            never go up -- otherwise the whole site sits behind it. */}
+        <noscript>
+          <style dangerouslySetInnerHTML={{ __html: '.preloader{display:none!important}' }} />
+        </noscript>
         {settings.site_favicon && <link rel="icon" href={settings.site_favicon} />}
         {settings.google_analytics_id && (
           <script async src={`https://www.googletagmanager.com/gtag/js?id=${settings.google_analytics_id}`} />
@@ -59,6 +66,8 @@ export default async function RootLayout({ children }) {
         <a href="#main" className="visually-hidden-focusable btn btn-brand m-2">Skip to content</a>
 
         <Providers site={site}>
+          <Preloader logo={settings.site_logo} siteName={settings.site_name} />
+
           <AnnouncementBar settings={settings} />
           <Header site={site} />
           <main id="main" className="flex-grow-1">{children}</main>

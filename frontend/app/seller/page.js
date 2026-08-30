@@ -46,7 +46,9 @@ export default function SellerDashboard() {
         </Link>
       </div>
 
-      <div className="row row-cols-2 row-cols-lg-4 g-3">
+      {/* One across on a phone: at 390px two of these cards left the
+          right-hand pair clipped at the screen edge. */}
+      <div className="row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-3">
         {tiles.map(([label, value, icon, hint]) => (
           <div className="col" key={label}>
             <div className="panel h-100">

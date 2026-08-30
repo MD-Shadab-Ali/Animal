@@ -22,22 +22,25 @@ export default function GoatGallery({ goat }) {
     <div>
       <div className="gallery__main mb-3">
         <img src={images[active].url} alt={images[active].alt || goat.name} />
+
+        {images.length > 1 && (
+          <span className="gallery__count">{active + 1} / {images.length}</span>
+        )}
       </div>
 
       {images.length > 1 && (
-        <div className="row row-cols-5 g-2">
+        <div className="gallery__strip">
           {images.map((image, index) => (
-            <div className="col" key={image.id ?? index}>
-              <button
-                type="button"
-                className={`gallery__thumb ${index === active ? 'is-active' : ''}`}
-                onClick={() => setActive(index)}
-                aria-label={`Show photo ${index + 1} of ${images.length}`}
-                aria-pressed={index === active}
-              >
-                <img src={image.url} alt="" />
-              </button>
-            </div>
+            <button
+              type="button"
+              key={image.id ?? index}
+              className={`gallery__thumb ${index === active ? 'is-active' : ''}`}
+              onClick={() => setActive(index)}
+              aria-label={`Show photo ${index + 1} of ${images.length}`}
+              aria-pressed={index === active}
+            >
+              <img src={image.url} alt="" />
+            </button>
           ))}
         </div>
       )}

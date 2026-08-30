@@ -74,12 +74,12 @@ export default async function GoatPage({ params }) {
 
       <div className="section pt-4">
         <div className="container">
-          <div className="row g-4 g-lg-5">
-            <div className="col-lg-7">
+          <div className="product-layout">
+            <div className="product-layout__media">
               <GoatGallery goat={goat} />
             </div>
 
-            <div className="col-lg-5">
+            <div className="product-layout__buy">
               <div className="d-flex flex-wrap gap-2 mb-3">
                 {goat.category?.name && <span className="chip">{goat.category.name}</span>}
                 {goat.is_vaccinated && (
@@ -133,10 +133,8 @@ export default async function GoatPage({ params }) {
 
               <BuyBox goat={goat} />
             </div>
-          </div>
 
-          <div className="row g-4 g-lg-5 mt-2">
-            <div className="col-lg-7">
+            <div className="product-layout__detail">
               <ul className="nav nav-tabs mb-4" role="tablist">
                 <li className="nav-item" role="presentation">
                   <button className="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-desc" type="button" role="tab">
@@ -166,17 +164,15 @@ export default async function GoatPage({ params }) {
                   <InquiryForm slug={goat.slug} />
                 </div>
               </div>
-            </div>
 
-            <div className="col-lg-5">
               {specs.length > 0 && (
-                <div className="panel">
+                <div className="panel mt-4">
                   <h2 className="h6 mb-3">Full specifications</h2>
-                  <dl className="mb-0">
+                  <dl className="spec-list mb-0">
                     {specs.map(([label, value]) => (
-                      <div className="d-flex justify-content-between gap-3 py-2 border-bottom" key={label}>
-                        <dt className="fw-normal text-soft">{label}</dt>
-                        <dd className="mb-0 fw-semibold text-ink text-end">{value}</dd>
+                      <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>{value}</dd>
                       </div>
                     ))}
                   </dl>

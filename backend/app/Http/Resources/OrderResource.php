@@ -12,59 +12,59 @@ class OrderResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'             => $this->id,
-            'order_number'   => $this->order_number,
-            'status'         => $this->status,
-            'status_label'   => Order::STATUSES[$this->status] ?? $this->status,
+            'id' => $this->id,
+            'order_number' => $this->order_number,
+            'status' => $this->status,
+            'status_label' => Order::STATUSES[$this->status] ?? $this->status,
             'payment_method' => $this->payment_method,
-            'payment_plan'   => $this->payment_plan,
+            'payment_plan' => $this->payment_plan,
             'payment_status' => $this->payment_status,
             'is_cancellable' => $this->isCancellable(),
             // The buyer can close this themselves by saying it arrived.
             'can_confirm_receipt' => $this->canConfirmReceipt(),
 
             'customer' => [
-                'name'  => $this->customer_name,
+                'name' => $this->customer_name,
                 'phone' => $this->customer_phone,
                 'email' => $this->customer_email,
             ],
 
             'shipping' => [
                 'address_line' => $this->address_line,
-                'area'         => $this->area,
-                'city'         => $this->city,
-                'postal_code'  => $this->postal_code,
-                'zone'         => $this->whenLoaded('deliveryZone', fn () => $this->deliveryZone?->name),
+                'area' => $this->area,
+                'city' => $this->city,
+                'postal_code' => $this->postal_code,
+                'zone' => $this->whenLoaded('deliveryZone', fn () => $this->deliveryZone?->name),
                 // What the buyer was promised when they chose the zone.
-                'estimate'     => $this->delivery_estimate,
-                'notes'        => $this->order_notes,
+                'estimate' => $this->delivery_estimate,
+                'notes' => $this->order_notes,
             ],
 
             'totals' => [
-                'subtotal'        => (float) $this->subtotal,
+                'subtotal' => (float) $this->subtotal,
                 // What the scale at the door did to the bill. Signed, and kept
                 // apart from the subtotal so the agreed figure stays readable.
                 'weight_adjustment' => (float) $this->weight_adjustment,
-                'discount'        => (float) $this->discount,
+                'discount' => (float) $this->discount,
                 'delivery_charge' => (float) $this->delivery_charge,
-                'total'           => (float) $this->total,
-                'paid'            => (float) $this->paid_amount,
+                'total' => (float) $this->total,
+                'paid' => (float) $this->paid_amount,
                 'advance_required' => $this->advance_required !== null ? (float) $this->advance_required : null,
-                'balance_due'     => $this->balance_due,
-                'currency'        => $this->currency,
+                'balance_due' => $this->balance_due,
+                'currency' => $this->currency,
             ],
 
             // Everything the buyer needs to actually pay: where to send it, how
             // much is left, and what they have already told us about.
             'payment' => $this->paymentBlock(),
-            'refund'  => $this->refundBlock(),
+            'refund' => $this->refundBlock(),
 
             // Each line is told which order it belongs to, so a delivered
             // order stops saying the goat is still with the courier.
-            'items'      => $this->whenLoaded('items', fn () => $this->items
+            'items' => $this->whenLoaded('items', fn () => $this->items
                 ->map(fn ($item) => (new OrderItemResource($item))->forOrder($this->status))),
-            'history'    => OrderStatusHistoryResource::collection($this->whenLoaded('statusHistories')),
-            'placed_at'  => $this->created_at?->toIso8601String(),
+            'history' => OrderStatusHistoryResource::collection($this->whenLoaded('statusHistories')),
+            'placed_at' => $this->created_at?->toIso8601String(),
             'delivered_at' => $this->delivered_at?->toIso8601String(),
         ];
     }
@@ -93,11 +93,15 @@ class OrderResource extends JsonResource
             ->get()
             ->filter(fn (PaymentMethod $method) => $method->isPrepayable())
             ->map(fn (PaymentMethod $method) => [
-                'code'         => $method->code,
-                'name'         => $method->name,
+                'code' => $method->code,
+                'name' => $method->name,
                 'instructions' => $method->instructions,
-                'logo'         => $method->logo_url,
-                'payee'        => $method->payeeDetails(),
+                'logo' => $method->logo_url,
+                'payee' => $method->payeeDetails(),
+                // Decides which of two different things the buyer is shown: a
+                // button that takes them to the provider, or an account to send
+                // money to and a form to tell us they did.
+                'is_gateway' => $method->isGateway(),
             ])
             ->values();
 
@@ -124,10 +128,10 @@ class OrderResource extends JsonResource
         };
 
         return [
-            'status'       => $this->payment_status,
-            'plan'         => $this->payment_plan,
-            'plan_label'   => $this->payment_plan_label,
-            'balance_due'  => $this->balance_due,
+            'status' => $this->payment_status,
+            'plan' => $this->payment_plan,
+            'plan_label' => $this->payment_plan_label,
+            'balance_due' => $this->balance_due,
             // The advance while one is outstanding, the whole balance after.
             'amount_due_now' => $this->amount_due_now,
             'advance_required' => $this->advance_required !== null
@@ -147,20 +151,20 @@ class OrderResource extends JsonResource
              */
             'due_kind' => match (true) {
                 $this->payment_plan === 'advance' && $this->awaiting_advance => 'advance',
-                (float) $this->paid_amount > 0                               => 'balance',
-                default                                                      => 'full',
+                (float) $this->paid_amount > 0 => 'balance',
+                default => 'full',
             },
-            'is_paid'      => $this->isFullyPaid(),
+            'is_paid' => $this->isFullyPaid(),
 
             // Owed now, but there may still be nowhere to send it.
-            'is_due'       => $open && $due,
-            'can_pay_now'  => $open && $due && ! $awaitingCheck && $payable->isNotEmpty(),
+            'is_due' => $open && $due,
+            'can_pay_now' => $open && $due && ! $awaitingCheck && $payable->isNotEmpty(),
             // Owed, and no admin has set up an account to receive it. Said out
             // loud rather than rendering nothing, which just looks broken.
             'awaiting_setup' => $open && $due && ! $awaitingCheck && $payable->isEmpty(),
 
             // Sent, and waiting on a person to check it against the account.
-            'awaiting_check'  => $awaitingCheck,
+            'awaiting_check' => $awaitingCheck,
             'submitted_amount' => round((float) $pending->sum('amount'), 2),
 
             // Everything promised up front has been paid; what is left is
@@ -168,10 +172,10 @@ class OrderResource extends JsonResource
             'settled_until_delivery' => $open && ! $due && ! $awaitingCheck
                 && (float) $this->paid_amount > 0,
 
-            'methods'      => $payable,
+            'methods' => $payable,
             // "What you have paid" means exactly that; refunds have their own
             // panel and would otherwise read as another payment.
-            'history'      => PaymentEntryResource::collection($paymentRows->values()),
+            'history' => PaymentEntryResource::collection($paymentRows->values()),
         ];
     }
 
@@ -192,14 +196,14 @@ class OrderResource extends JsonResource
         $sent = $refunds->where('status', 'confirmed');
 
         return [
-            'amount'      => $this->refundable_amount,
+            'amount' => $this->refundable_amount,
             // Why anything is owed. A cancelled order and a goat that weighed
             // light are both refunds, but telling a buyer their live order was
             // cancelled would be alarming and untrue.
-            'reason'      => $this->status === 'cancelled' ? 'cancelled' : 'overpaid',
+            'reason' => $this->status === 'cancelled' ? 'cancelled' : 'overpaid',
             // The rails we can actually send money out on — the same ones
             // seller payouts use, since it is the same direction of travel.
-            'methods'     => PaymentMethod::payout()
+            'methods' => PaymentMethod::payout()
                 ->orderBy('sort_order')
                 ->get()
                 ->map(fn (PaymentMethod $method) => [
@@ -210,18 +214,18 @@ class OrderResource extends JsonResource
                 ->values(),
             // Something is owed back and nobody has asked for it yet.
             'can_request' => $this->isRefundable() && ! $open,
-            'requested'   => $open !== null,
+            'requested' => $open !== null,
             'requested_at' => $open?->created_at?->toIso8601String(),
-            'sent'        => round((float) $sent->sum('amount'), 2),
+            'sent' => round((float) $sent->sum('amount'), 2),
             'destination' => $open?->refund_destination ?? $sent->last()?->refund_destination,
 
             // How long this rail actually takes, and the reference to quote if
             // it has not turned up. Null means nobody has said, so the
             // storefront promises nothing rather than inventing a duration.
-            'eta'         => ($open ?? $sent->last())?->arrival_eta,
+            'eta' => ($open ?? $sent->last())?->arrival_eta,
             'method_label' => ($open ?? $sent->last())?->method_label,
-            'reference'   => $sent->last()?->transaction_reference,
-            'sent_at'     => $sent->last()?->confirmed_at?->toIso8601String(),
+            'reference' => $sent->last()?->transaction_reference,
+            'sent_at' => $sent->last()?->confirmed_at?->toIso8601String(),
         ];
     }
 }

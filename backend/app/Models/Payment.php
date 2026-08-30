@@ -11,6 +11,7 @@ class Payment extends Model
 {
     protected $fillable = [
         'reference', 'order_id', 'user_id', 'method', 'amount', 'currency',
+        'gateway', 'gateway_ref', 'gateway_txn_id', 'gateway_status', 'gateway_payload',
         'type', 'status', 'source', 'transaction_reference', 'proof', 'note',
         'paid_at', 'confirmed_at', 'confirmed_by', 'created_by',
         'refund_to_name', 'refund_to_account', 'refund_to_bank', 'refund_reason',
@@ -19,34 +20,35 @@ class Payment extends Model
     protected function casts(): array
     {
         return [
-            'amount'       => 'decimal:2',
-            'paid_at'      => 'datetime',
+            'amount' => 'decimal:2',
+            'gateway_payload' => 'array',
+            'paid_at' => 'datetime',
             'confirmed_at' => 'datetime',
         ];
     }
 
     public const STATUSES = [
-        'pending'   => 'Awaiting check',
+        'pending' => 'Awaiting check',
         'confirmed' => 'Received',
-        'rejected'  => 'Rejected',
+        'rejected' => 'Rejected',
     ];
 
     public const STATUS_COLORS = [
-        'pending'   => 'warning',
+        'pending' => 'warning',
         'confirmed' => 'success',
-        'rejected'  => 'danger',
+        'rejected' => 'danger',
     ];
 
     /** The same three states, worded for money travelling the other way. */
     public const REFUND_STATUSES = [
-        'pending'   => 'Refund requested',
+        'pending' => 'Refund requested',
         'confirmed' => 'Refunded',
-        'rejected'  => 'Declined',
+        'rejected' => 'Declined',
     ];
 
     public const TYPES = [
         'payment' => 'Payment',
-        'refund'  => 'Refund',
+        'refund' => 'Refund',
     ];
 
     public function order(): BelongsTo

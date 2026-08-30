@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import GoogleButton from '@/components/auth/GoogleButton';
+import RecaptchaCheckbox, { RECAPTCHA_ENABLED } from '@/components/auth/RecaptchaCheckbox';
 import { useAuth } from '@/context/AuthContext';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, verifyEmail, resendVerification } = useAuth();
+  const { register, verifyEmail, resendVerification, loginWithGoogle } = useAuth();
 
   // Signing up is now two steps: details, then the code that proves the
   // address. `pending` holds the address between them.
@@ -25,20 +27,40 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
 
+  // The robot check sits on every signup, and the submit button waits for it.
+  const [recaptchaToken, setRecaptchaToken] = useState(null);
+  const [recaptchaReset, setRecaptchaReset] = useState(0);
+
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   const submit = async (event) => {
     event.preventDefault();
+
+    // The button is disabled without a token, so this only catches a form
+    // submitted by keyboard before the box was ticked.
+    if (RECAPTCHA_ENABLED && ! recaptchaToken) {
+      setErrors({ recaptcha: [`Please tick the "I'm not a robot" box.`] });
+      return;
+    }
+
     setBusy(true);
     setErrors({});
 
     try {
-      const result = await register(form);
+      const result = await register({ ...form, recaptcha_token: recaptchaToken });
+
       toast.success(`We sent a code to ${result.email}.`);
       setPending(result.email);
     } catch (error) {
-      setErrors(error.errors || {});
-      toast.error(error.message || 'Could not create your account.');
+      const fieldErrors = error.errors || {};
+      setErrors(fieldErrors);
+
+      // A token is spent once it has been submitted, whatever the outcome, so
+      // the widget goes back to an unticked box rather than holding a dead one.
+      setRecaptchaToken(null);
+      setRecaptchaReset((count) => count + 1);
+
+      toast.error(fieldErrors.recaptcha?.[0] || error.message || 'Could not create your account.');
     } finally {
       setBusy(false);
     }
@@ -70,6 +92,30 @@ export default function RegisterPage() {
       toast.success(response.message);
     } catch (error) {
       toast.error(error.errors?.email?.[0] || 'Could not send another code.');
+    }
+  };
+
+  /*
+   * The same handler, and the same button, as the sign-in page. Google has
+   * already proved the address, so there is no code to email and no second
+   * step -- this lands straight on a signed-in home page.
+   */
+  const continueWithGoogle = async (credential, failure) => {
+    if (! credential) {
+      if (failure) toast.error(failure);
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const user = await loginWithGoogle(credential);
+      toast.success(`Welcome, ${user.name.split(' ')[0]}.`);
+      router.replace('/');
+    } catch (error) {
+      toast.error(error.errors?.credential?.[0] || error.message || 'Could not sign you in with Google.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -149,9 +195,22 @@ export default function RegisterPage() {
           {field('password', 'Password', 'password', 'new-password')}
           {field('password_confirmation', 'Confirm password', 'password', 'new-password')}
 
-          <button className="btn btn-brand w-100 mb-3" type="submit" disabled={busy}>
+          <RecaptchaCheckbox
+            onChange={setRecaptchaToken}
+            error={errors.recaptcha?.[0]}
+            resetToken={recaptchaReset}
+            disabled={busy}
+          />
+
+          <button
+            className="btn btn-brand w-100 mb-3"
+            type="submit"
+            disabled={busy || (RECAPTCHA_ENABLED && ! recaptchaToken)}
+          >
             {busy ? 'Creating account…' : 'Create account'}
           </button>
+
+          <GoogleButton onCredential={continueWithGoogle} disabled={busy} />
 
           <p className="text-center small mb-0">
             Already registered? <Link href="/login" className="text-brand fw-semibold">Sign in</Link>

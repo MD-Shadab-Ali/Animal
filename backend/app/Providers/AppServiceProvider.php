@@ -47,6 +47,10 @@ class AppServiceProvider extends ServiceProvider
         // Public write endpoints that anyone can hit without an account.
         RateLimiter::for('public-forms', fn (Request $request) => Limit::perMinute(6)->by($request->ip()));
 
+        // Google sign-in. Keyed on the IP alone: the request carries an ID token
+        // and no email, so there is nothing else to key on until it is verified.
+        RateLimiter::for('google-auth', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
+
         // Placing an order — generous for a person, tight for a script.
         RateLimiter::for('checkout', fn (Request $request) => Limit::perMinute(10)
             ->by($request->user()?->id ?: $request->ip()));
