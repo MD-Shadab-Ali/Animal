@@ -2,24 +2,31 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import ListingForm from '@/components/seller/ListingForm';
 import ListingStatusPill from '@/components/seller/ListingStatusPill';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 export default function EditListingPage() {
   const { id } = useParams();
   const { token } = useAuth();
   const [listing, setListing] = useState(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) return;
 
-    apiFetch(`/seller/listings/${id}`, { token })
-      .then((response) => setListing(response.data))
-      .catch(() => setListing(false));
+    try {
+      const response = await apiFetch(`/seller/listings/${id}`, { token });
+      setListing(response.data);
+    } catch {
+      setListing(false);
+    }
   }, [token, id]);
+
+  // Approval, rejection and "changes needed" all arrive from the admin panel.
+  useLiveRefresh(load, { immediate: true, enabled: Boolean(token) });
 
   if (listing === null) {
     return <div className="panel text-center py-5"><span className="spinner-border text-brand" /></div>;

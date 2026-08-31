@@ -1,5 +1,6 @@
 'use client';
 
+import { AnimatePresence, m } from 'motion/react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -14,6 +15,7 @@ import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import { isGatewayMethod, payThroughGateway } from '@/lib/gateway';
 import { formatMoney } from '@/lib/format';
+import { TRANSITION, stepPane } from '@/lib/motion';
 
 function CheckoutInner() {
   const router = useRouter();
@@ -27,6 +29,7 @@ function CheckoutInner() {
   const [errors, setErrors] = useState({});
   const [placing, setPlacing] = useState(false);
   const [step, setStep] = useState(1);
+  const [forward, setForward] = useState(true);
 
   const [form, setForm] = useState({
     customer_name: '',
@@ -101,6 +104,19 @@ function CheckoutInner() {
   const update = (key) => (event) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
     setForm((current) => ({ ...current, [key]: value }));
+
+    // A field's error answers "this is why you cannot go on". The moment the
+    // buyer edits that field the answer is stale, and leaving it up reads as
+    // "still wrong" while they are in the middle of putting it right. Cleared
+    // per field, so the other outstanding ones stay marked.
+    setErrors((current) => {
+      if (!current[key]) return current;
+
+      const next = { ...current };
+      delete next[key];
+
+      return next;
+    });
   };
 
   const selectedZone = options?.delivery_zones?.find(
@@ -164,8 +180,11 @@ function CheckoutInner() {
   const REQUIRED_ON_DELIVERY = {
     customer_name: 'Please tell us who is receiving the goat.',
     customer_phone: 'We need a phone number for the delivery.',
+    customer_email: 'We need an email to send the order confirmation to.',
     address_line: 'Please give us a street address.',
     city: 'Please give us a city or district.',
+    area: 'Please tell us the area or thana.',
+    postal_code: 'Please give us a postal code.',
   };
 
   // The same checks the server will run, asked early enough to be useful.
@@ -190,6 +209,9 @@ function CheckoutInner() {
   };
 
   const goTo = (target) => {
+    // Which way the panes travel. Going back has to look like going back, or
+    // correcting an address from the review reads as another step forward.
+    setForward(target >= step);
     setStep(target);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -355,34 +377,57 @@ function CheckoutInner() {
         <form onSubmit={submit} noValidate>
           <div className="row g-4">
             <div className="col-lg-8">
-              {step === 3 ? (
-                <CheckoutReview
-                  form={form}
-                  options={options}
-                  settings={settings}
-                  selectedZone={selectedZone}
-                  selectedMethod={selectedMethod}
-                  deliveryCharge={deliveryCharge}
-                  orderTotal={orderTotal}
-                  paymentPlan={paymentPlan}
-                  onEdit={goTo}
-                />
-              ) : (
-                <CheckoutFields
-                  form={form}
-                  errors={errors}
-                  update={update}
-                  prefilled={prefilled}
-                  options={options}
-                  settings={settings}
-                  selectedZone={selectedZone}
-                  selectedMethod={selectedMethod}
-                  subtotalAfterDiscount={subtotalAfterDiscount}
-                  orderTotal={orderTotal}
-                  paymentPlan={paymentPlan}
-                  step={step}
-                />
-              )}
+              {/*
+                * mode="wait" so the outgoing step is gone before the next one
+                * arrives -- two half-faded forms overlapping is worse than a
+                * beat of nothing, and the beat is covered by the scroll to the
+                * top that goTo() already performs.
+                *
+                * Keyed on the step, so 1 -> 2 animates as well as 2 -> 3. That
+                * remounts CheckoutFields between the delivery and payment
+                * steps, which is safe: it holds no state of its own, every
+                * value it shows is a prop from the form state up here.
+                */}
+              <AnimatePresence mode="wait" custom={forward} initial={false}>
+                <m.div
+                  key={step}
+                  custom={forward}
+                  variants={stepPane}
+                  initial="enter"
+                  animate="centre"
+                  exit="exit"
+                  transition={TRANSITION.fast}
+                >
+                  {step === 3 ? (
+                    <CheckoutReview
+                      form={form}
+                      options={options}
+                      settings={settings}
+                      selectedZone={selectedZone}
+                      selectedMethod={selectedMethod}
+                      deliveryCharge={deliveryCharge}
+                      orderTotal={orderTotal}
+                      paymentPlan={paymentPlan}
+                      onEdit={goTo}
+                    />
+                  ) : (
+                    <CheckoutFields
+                      form={form}
+                      errors={errors}
+                      update={update}
+                      prefilled={prefilled}
+                      options={options}
+                      settings={settings}
+                      selectedZone={selectedZone}
+                      selectedMethod={selectedMethod}
+                      subtotalAfterDiscount={subtotalAfterDiscount}
+                      orderTotal={orderTotal}
+                      paymentPlan={paymentPlan}
+                      step={step}
+                    />
+                  )}
+                </m.div>
+              </AnimatePresence>
             </div>
 
             <div className="col-lg-4">

@@ -38,6 +38,9 @@ class OrderNotificationTest extends TestCase
 
         $order = $this->postJson('/api/v1/checkout', [
             'customer_name'    => 'Rahim Uddin',
+            'customer_email'   => 'rahim@example.test',
+            'area'             => 'Ward 4',
+            'postal_code'      => '44600',
             'customer_phone'   => '+880 1811-111111',
             'address_line'     => 'House 12',
             'city'             => 'Dhaka',
@@ -99,6 +102,9 @@ class OrderNotificationTest extends TestCase
         // Empty cart — checkout must fail before anything is emailed.
         $this->postJson('/api/v1/checkout', [
             'customer_name'    => 'Rahim Uddin',
+            'customer_email'   => 'rahim@example.test',
+            'area'             => 'Ward 4',
+            'postal_code'      => '44600',
             'customer_phone'   => '+880 1811-111111',
             'address_line'     => 'House 12',
             'city'             => 'Dhaka',

@@ -64,6 +64,9 @@ class BuyerConfirmsReceiptTest extends TestCase
 
         $number = $this->postJson('/api/v1/checkout', [
             'customer_name' => 'Rahim Uddin',
+            'customer_email' => 'rahim@example.test',
+            'area' => 'Ward 4',
+            'postal_code' => '44600',
             'customer_phone' => '+977 9800-111111',
             'address_line' => 'House 12',
             'city' => 'Kathmandu',

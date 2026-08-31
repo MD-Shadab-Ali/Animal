@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import FulfilmentControl from '@/components/seller/FulfilmentControl';
 import OrderStatusControl from '@/components/seller/OrderStatusControl';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 import { formatDate, formatMoney } from '@/lib/format';
 
 const STATUS_CLASS = {
@@ -21,28 +22,23 @@ export default function SellerOrdersPage() {
   const { token } = useAuth();
   const settings = useSettings();
   const [orders, setOrders] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
-    let active = true;
+  const load = useCallback(async () => {
+    if (!token) return;
 
-    async function load() {
-      if (!token) return;
-
-      try {
-        const response = await apiFetch('/seller/orders', { token });
-        if (active) setOrders(response.data || []);
-      } catch {
-        if (active) setOrders([]);
-      }
+    try {
+      const response = await apiFetch('/seller/orders', { token });
+      setOrders(response.data || []);
+    } catch {
+      setOrders([]);
     }
+  }, [token]);
 
-    load();
+  // A seller watching this list has no idea an order moved in the admin panel.
+  useLiveRefresh(load, { immediate: true, enabled: Boolean(token) });
 
-    return () => { active = false; };
-  }, [token, reloadKey]);
-
-  const refresh = () => setReloadKey((value) => value + 1);
+  // What the child rows call after acting on an order; it used to bump a key.
+  const refresh = load;
 
   if (orders === null) {
     return <div className="panel text-center py-5"><span className="spinner-border text-brand" /></div>;

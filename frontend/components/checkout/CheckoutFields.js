@@ -81,11 +81,11 @@ export default function CheckoutFields({
         <div className="row g-3">
           {field('customer_name', 'Full name', { required: true })}
           {field('customer_phone', 'Phone number', { type: 'tel', required: true })}
-          {field('customer_email', 'Email', { type: 'email', colClass: 'col-12' })}
+          {field('customer_email', 'Email', { type: 'email', colClass: 'col-12', required: true })}
           {field('address_line', 'Street address', { required: true })}
           {field('city', 'City / district', { required: true })}
-          {field('area', 'Area / thana')}
-          {field('postal_code', 'Postal code')}
+          {field('area', 'Area / thana', { required: true })}
+          {field('postal_code', 'Postal code', { required: true })}
         </div>
       </section>
 

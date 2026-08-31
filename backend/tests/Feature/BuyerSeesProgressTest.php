@@ -60,6 +60,9 @@ class BuyerSeesProgressTest extends TestCase
 
         $number = $this->postJson('/api/v1/checkout', [
             'customer_name' => 'Rahim', 'customer_phone' => '+977 9801-111111',
+            'customer_email' => 'rahim@example.test',
+            'area' => 'Ward 4',
+            'postal_code' => '44600',
             'address_line' => 'Baghbazar', 'city' => 'Kathmandu',
             'delivery_zone_id' => DeliveryZone::active()->firstOrFail()->id,
             'payment_method' => 'cod',

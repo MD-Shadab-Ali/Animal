@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 import { useAuth } from './AuthContext';
 
 const SellerContext = createContext(null);
@@ -49,6 +50,15 @@ export function SellerProvider({ children }) {
     setSeller(response.data ?? null);
     return response.data ?? null;
   }, [token]);
+
+  /*
+   * Whether a seller is approved, rejected or still waiting is decided by
+   * staff, and this context is what the whole seller area reads. Someone who
+   * applied and is refreshing to find out now gets the answer by coming back
+   * to the tab. No interval: an approval is not a thing that happens while you
+   * watch, and this provider is mounted on every page.
+   */
+  useLiveRefresh(refresh, { enabled: Boolean(token), intervalMs: 0 });
 
   const value = useMemo(() => ({
     seller,

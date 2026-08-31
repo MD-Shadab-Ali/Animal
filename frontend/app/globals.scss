@@ -705,15 +705,31 @@ button:disabled { cursor: not-allowed; }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: carousel-fade .6s var(--slide-ease);
 }
-@keyframes carousel-fade { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+
+/* One banner's worth of frame, stacked on the last one so the two can cross
+   over. The keyframe that used to fade a slide in lived on the img above and
+   could only ever animate the arriving banner; Motion owns both halves now,
+   and honours prefers-reduced-motion through MotionConfig in providers.js. */
+.carousel-hero__media {
+  position: absolute;
+  inset: 0;
+}
+.carousel-hero__media img,
+.carousel-hero__media .hero__media-empty {
+  width: 100%;
+  height: 100%;
+}
 
 .carousel-hero__blank { width: 100%; height: 100%; background: var(--surface); display: block; }
 
+/* Both of these sit over the banner, and the banner is what gets swiped, so
+   neither may swallow the pointer. They are decoration and a label; there is
+   nothing in either to click. */
 .carousel-hero__scrim {
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background: linear-gradient(0deg, rgba(15, 23, 42, .45), transparent 55%);
 }
 
@@ -722,6 +738,7 @@ button:disabled { cursor: not-allowed; }
   inset-inline: 0;
   bottom: 0;
   padding: 1.25rem;
+  pointer-events: none;
 }
 .carousel-hero__caption strong { display: block; color: #fff; font-size: 1rem; font-weight: 600; }
 .carousel-hero__eyebrow {
@@ -796,7 +813,9 @@ button:disabled { cursor: not-allowed; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .carousel-hero__slide img { animation: none; }
+  /* The slide crossfade is Motion's now, and MotionConfig reducedMotion="user"
+     in providers.js already stands it down. Only the progress fill is still
+     driven from here. */
   .carousel-hero__progress span.is-running { animation: none; }
 }
 .hero__stat b { display: block; color: var(--ink); font-family: var(--font-heading), sans-serif; font-size: 1.05rem; }
@@ -1258,7 +1277,10 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 .filter-option.is-active { background: var(--surface); color: var(--brand-primary); font-weight: 600; }
 .filter-option small { color: var(--muted); font-weight: 400; }
 
-.active-filters { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* position: relative because a chip on its way out is taken out of the flow
+   (AnimatePresence popLayout) so the chips after it can close the gap, and it
+   has to be positioned against this row rather than the page. */
+.active-filters { display: flex; flex-wrap: wrap; gap: .5rem; position: relative; }
 
 .toolbar {
   display: flex;
@@ -1283,6 +1305,14 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 @media (min-width: 992px) {
   .product-layout {
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    /* Load bearing. The buy column spans both rows, and grid hands a spanning
+       item's surplus height to the tracks it crosses -- split evenly between
+       them unless one can absorb it. Left as auto/auto, half the surplus
+       inflates the gallery's row and reopens a gap under the photo on any
+       listing whose buy box outgrows the left column. The 1fr takes all of it
+       into the second row, where it lands under the last panel and reads as
+       section padding. */
+    grid-template-rows: auto 1fr;
     column-gap: clamp(1.75rem, 3vw, 3rem);
     row-gap: var(--space-2xl);
     align-items: start;
@@ -1310,11 +1340,21 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 }
 .gallery__main img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Stacked, so one photo can dissolve into the next rather than replacing it.
+   The 4/3 box above already holds the height, so taking these out of the flow
+   costs no layout -- and it is what stops a swipe from moving the page. */
+.gallery__frame {
+  position: absolute;
+  inset: 0;
+}
+
 /* Says how many photos there are before the eye reaches the strip below. */
 .gallery__count {
   position: absolute;
   right: var(--space-md);
   bottom: var(--space-md);
+  /* Sits on the photo, and the photo is swiped. */
+  pointer-events: none;
   padding: .25rem .625rem;
   border-radius: var(--radius-pill);
   background: rgba(17, 24, 20, .62);
@@ -1790,24 +1830,274 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   }
 }
 
-/* ── Order status timeline ───────────────────────────────── */
-.timeline { display: flex; gap: .5rem; }
-.timeline__step { flex: 1; text-align: center; }
-.timeline__dot {
+/* ── Order detail ─────────────────────────────── */
+/*
+ * A single order gets the full width and no account sidebar -- it is a
+ * document, not a dashboard screen. The record of what was bought and what is
+ * owed sits in the narrow column; everything that is still moving stays in the
+ * wide one, in the order it happens: where the goat is, what the farm said,
+ * what is left to pay, what was bought.
+ */
+.order-grid { display: grid; gap: var(--space-lg); }
+.order-grid__main,
+.order-grid__aside { display: grid; gap: var(--space-lg); align-content: start; min-width: 0; }
+
+@media (min-width: 992px) {
+  .order-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+    column-gap: var(--space-xl);
+    align-items: start;
+  }
+}
+
+/* The state in words, ahead of the reference code: "where is my goat" is what
+   the page is opened for, and an order number answers a different question. */
+.tracker__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.tracker__badge {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--brand-primary);
+  font-size: 1.25rem;
+}
+.tracker__badge.is-done {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #fff;
+}
+
+.tracker__title {
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 .25rem;
+}
+.tracker__lead { font-size: .875rem; color: var(--muted); margin: 0; }
+
+.tracker {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tracker__step { position: relative; min-width: 0; padding: 0 .25rem; text-align: center; }
+
+.tracker__dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
   width: 34px;
   height: 34px;
   margin: 0 auto .5rem;
-  border-radius: var(--radius-pill);
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--muted);
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+.tracker__step.is-done .tracker__dot {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #fff;
+}
+/* The step in progress is ringed rather than filled: filled reads as finished,
+   and this one has not happened yet. */
+.tracker__step.is-current .tracker__dot { box-shadow: 0 0 0 4px rgba(21, 128, 61, .14); }
+
+.tracker__label { display: block; font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.tracker__step.is-done .tracker__label { color: var(--ink); }
+
+/* Reserved even when empty, so the labels of undated steps stay on one line
+   with the rest. */
+.tracker__when { display: block; min-height: 1rem; margin-top: .125rem; font-size: .6875rem; color: var(--muted); }
+
+/*
+ * Each step draws the rail leading into it, so a segment fills exactly when
+ * the step it points at is reached -- no bookkeeping about which segment
+ * belongs to which pair. Inset by the dot's radius plus a little air.
+ */
+.tracker__step:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: calc(50% + 22px);
+  left: calc(-50% + 22px);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background var(--speed) var(--ease);
+}
+.tracker__step.is-done::before { background: var(--brand-primary); }
+
+/*
+ * Five dated steps do not fit across a phone. Standing the rail up is what
+ * every large storefront does at this width, and it gives each step its date
+ * back instead of dropping it.
+ */
+@media (max-width: 767.98px) {
+  .tracker { grid-template-columns: 1fr; }
+
+  .tracker__step {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    column-gap: .875rem;
+    padding: 0 0 1.25rem;
+    text-align: left;
+  }
+  .tracker__step:last-child { padding-bottom: 0; }
+
+  .tracker__dot { grid-row: 1 / span 2; margin: 0; }
+  .tracker__label { align-self: center; }
+
+  .tracker__step:not(:first-child)::before { display: none; }
+
+  /* Standing up, a step draws the rail leading out of it instead, which is
+     filled once the step below has been reached. */
+  .tracker__step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 34px;
+    bottom: 2px;
+    left: 16px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--line);
+  }
+  .tracker__step.is-done:not(.is-current)::after { background: var(--brand-primary); }
+}
+
+/* What the farm wrote and photographed as the order moved. */
+.update-row { display: grid; gap: .375rem; }
+.update-row + .update-row { margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--line); }
+.update-row__meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
+.update-row__step { font-size: .8125rem; font-weight: 700; color: var(--ink); }
+.update-row__when { font-size: .75rem; color: var(--muted); }
+
+.min-w-0 { min-width: 0; }
+
+/*
+ * Each tab stays on one line and the rail scrolls sideways instead. Wrapped,
+ * "My orders" broke across two lines and took the rail's height with it.
+ *
+ * The axes are named separately on purpose. Bootstrap's .overflow-auto sets
+ * both, and the active tab's underline leaves the rail one pixel taller than
+ * its box -- enough for a full vertical scrollbar to appear beside five tabs
+ * that have nowhere to scroll to.
+ */
+.tab-rail {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.tab-rail .nav-link { white-space: nowrap; }
+
+/*
+ * A dashboard figure. Icon beside the number rather than stacked above it, so
+ * a row of four reads as one instrument panel instead of four separate cards.
+ */
+.stat-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  height: 100%;
+  padding: var(--space-lg);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.stat-tile__icon {
   display: grid;
   place-items: center;
-  background: var(--surface-alt);
-  color: var(--muted);
-  border: 1px solid var(--line);
-  font-size: .8rem;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--brand-primary);
+  font-size: 1.05rem;
 }
-.timeline__step.is-done .timeline__dot { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
-.timeline__step span { font-size: .75rem; color: var(--muted); }
-.timeline__step.is-done span { color: var(--ink); font-weight: 600; }
+
+.stat-tile__value {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.stat-tile__label { font-size: .875rem; font-weight: 600; color: var(--ink); }
+.stat-tile__hint { font-size: .75rem; color: var(--muted); }
+
+/* Only ever set from the data. A tile that wants something doing says so; at
+   zero it is as quiet as the other three. */
+.stat-tile--warn { border-color: #fcd9a4; background: #fffbf4; }
+.stat-tile--warn .stat-tile__icon { background: #fdf0d9; color: #b45309; }
+
+/*
+ * An order in a list. The head is the part you scan -- when, how much, which
+ * one -- on its own tinted band, with the goats and where they have got to
+ * underneath. Whole-card clickable through a stretched link on the action,
+ * which is why the card is the positioned ancestor.
+ */
+.order-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: box-shadow var(--speed) var(--ease), border-color var(--speed) var(--ease);
+}
+.order-card + .order-card { margin-top: var(--space-md); }
+.order-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+
+.order-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-xl);
+  padding: .75rem var(--space-lg);
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--line);
+}
+.order-card__head span {
+  display: block;
+  font-size: .6875rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.order-card__head strong { font-size: .875rem; font-weight: 600; color: var(--ink); }
+
+/* Pushed to the end of the band, and dropped under it on a narrow screen
+   rather than squeezing the three facts that matter more. */
+.order-card__action { margin-left: auto; }
+
+.order-card__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
+@media (max-width: 575.98px) {
+  .order-card__head { gap: .625rem var(--space-lg); }
+  .order-card__action { margin-left: 0; width: 100%; }
+}
 
 .status-pill { font-size: .75rem; font-weight: 700; padding: .3125rem .75rem; border-radius: var(--radius-pill); }
 
@@ -2175,9 +2465,55 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   .header__nav .navlink::after { transition: none; }
 }
 
+/* ── Mobile nav drawer ───────────────────────────────────────
+   Was a Bootstrap offcanvas. Bootstrap cancels clicks on anchors when it
+   dismisses, which broke every next/link inside it, so the drawer is ours
+   now and Motion slides it. The z-indexes are kept at the values Bootstrap
+   used -- 1044 for the scrim, 1045 for the panel -- because the rest of the
+   stylesheet was written around them: the sticky header sits at 1040 and the
+   back-to-top button at 1030, both of which must stay underneath. */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1044;
+  background: rgba(15, 23, 42, .45);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1045;
+  width: min(22rem, 85vw);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -18px 0 45px -30px rgba(15, 23, 42, .5);
+}
+
+.drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Scrolls on its own, so a long menu never takes the page with it. */
+.drawer__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg);
+}
+
 /* ── Back to top ─────────────────────────────────────────────
    Bottom-right, clear of the mobile nav drawer. z-index sits under
-   Bootstrap's offcanvas (1045) and modal (1055) on purpose, so it
+   the drawer (1045) and Bootstrap's modal (1055) on purpose, so it
    tucks behind them rather than floating over a dialog. */
 .to-top {
   position: fixed;

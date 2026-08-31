@@ -1,12 +1,13 @@
 'use client';
 
+import { AnimatePresence, m } from 'motion/react';
 import Link from 'next/link';
-import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useSettings } from '@/context/SiteContext';
 import CartSummary from '@/components/cart/CartSummary';
 import CartLine from '@/components/cart/CartLine';
+import { TRANSITION, rowExit } from '@/lib/motion';
 
 export default function CartPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -60,10 +61,30 @@ export default function CartPage() {
 
         <div className="row g-4">
           <div className="col-lg-8">
-            <div className="panel p-0 overflow-hidden">
-              {items.map((item, index) => (
-                <CartLine key={item.id} item={item} isFirst={index === 0} settings={settings} />
-              ))}
+            {/* position: relative because popLayout below takes a departing
+                row out of the flow, and it has to be taken out relative to
+                this panel rather than to whatever is positioned above it. */}
+            <div className="panel p-0 overflow-hidden" style={{ position: 'relative' }}>
+              {/*
+                * The wrapper is here rather than inside CartLine because
+                * popLayout has to measure its own direct child, and CartLine
+                * is a plain function component with nowhere to put a ref.
+                */}
+              <AnimatePresence initial={false} mode="popLayout">
+                {items.map((item, index) => (
+                  <m.div
+                    key={item.id}
+                    layout
+                    variants={rowExit}
+                    initial="hidden"
+                    animate="shown"
+                    exit="hidden"
+                    transition={TRANSITION.fast}
+                  >
+                    <CartLine item={item} isFirst={index === 0} settings={settings} />
+                  </m.div>
+                ))}
+              </AnimatePresence>
             </div>
 
             <div className="d-flex justify-content-between mt-3">

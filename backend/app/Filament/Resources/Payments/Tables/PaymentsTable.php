@@ -77,7 +77,6 @@ class PaymentsTable
                     ->searchable()
                     ->toggleable(),
 
-
                 // Whether there is anything to look at, and a way straight to it.
                 TextColumn::make('proof')
                     ->label('Receipt')
@@ -97,7 +96,7 @@ class PaymentsTable
                 TextColumn::make('source')
                     ->badge()
                     ->color('gray')
-                    ->formatStateUsing(fn (?string $state) => $state === 'customer' ? 'From customer' : 'Staff')
+                    ->formatStateUsing(fn (?string $state) => Payment::SOURCES[$state] ?? $state)
                     ->toggleable(),
 
                 TextColumn::make('paid_at')->label('Paid')->dateTime('d M Y')->placeholder('—')->sortable(),

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import OrderPayment from '@/components/account/OrderPayment';
 import OrderRefund from '@/components/account/OrderRefund';
@@ -10,6 +10,7 @@ import OrderTimeline, { BUYER_STATUS_LABELS } from '@/components/account/OrderTi
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 import { apiFetch } from '@/lib/api';
 import { formatDateTime, formatMoney } from '@/lib/format';
 
@@ -38,9 +39,6 @@ export default function OrderDetailPage() {
   const [confirmingReceipt, setConfirmingReceipt] = useState(false);
   const [receipting, setReceipting] = useState(false);
 
-  // Bumped after a payment is submitted so the balance and the history reload.
-  const [reloads, setReloads] = useState(0);
-
   // The ?placed=1 flag lives in the URL, so it outlives whatever happens to the
   // order next. Greeting someone with "your order is in" after they cancelled
   // it — or after it has already moved on — is worse than saying nothing.
@@ -53,13 +51,31 @@ export default function OrderDetailPage() {
    */
   const paymentResult = searchParams.get('payment');
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) return;
 
-    apiFetch(`/orders/${number}`, { token })
-      .then((response) => setOrder(response.data))
-      .catch(() => setOrder(false));
-  }, [token, number, reloads]);
+    try {
+      const response = await apiFetch(`/orders/${number}`, { token });
+      setOrder(response.data);
+    } catch {
+      setOrder(false);
+    }
+  }, [token, number]);
+
+  /*
+   * Staff move an order along from the admin panel, and this page had no way
+   * of knowing. Left alone it went on showing "Confirmed" long after the goat
+   * was being prepared, which reads as nothing having happened.
+   *
+   * A settled order has nowhere further to go, so it stops watching -- but it
+   * is still loaded once, which is why the first fetch is not tied to that.
+   */
+  const settled = order && ['delivered', 'cancelled'].includes(order.status);
+
+  useLiveRefresh(load, {
+    immediate: true,
+    enabled: Boolean(token) && ! settled,
+  });
 
   // The buyer is the one person who actually knows the goat turned up, so
   // saying so closes the order — which is also what releases the seller's money.
@@ -115,6 +131,7 @@ export default function OrderDetailPage() {
   const paidSoFar = Number(order?.totals?.paid || 0);
   const isCancelled = order.status === 'cancelled';
   const refundSent = Number(order?.refund?.sent || 0);
+  const itemCount = order.items?.length || 0;
 
   const cancelWarnings = [
     'The goat goes back on sale, and we will let the farm know.',
@@ -127,15 +144,25 @@ export default function OrderDetailPage() {
   ];
 
   // Steps staff actually wrote something or attached a photo to. A bare status
-  // change is already drawn by the timeline, so an empty row would add a line
+  // change is already drawn by the tracker, so an empty row would add a line
   // to the page and nothing to what the buyer knows.
   //
   // `pending` is dropped with it: the observer writes an "Order placed" row the
   // moment an order exists, which is not staff telling the buyer anything --
-  // the timeline above already says Placed, with the same timestamp.
+  // the tracker above already says Placed, with the same timestamp.
   const updates = (order.history || [])
     .filter((entry) => entry.status !== 'pending')
-    .filter((entry) => entry.note || entry.photo);
+    .filter((entry) => entry.note || entry.photo)
+    /*
+     * Words expire, photographs do not. "Preparing — here is your goat" is
+     * worth reading while the goat is being prepared; under a delivered order
+     * it describes something that finished days ago, and the tracker above
+     * already says where the order actually got to. The photo is the one thing
+     * that never goes stale -- it is still the only picture of the animal the
+     * buyer bought -- so a past step keeps its photo and loses its text, and
+     * a past step that never had a photo drops out of the list entirely.
+     */
+    .filter((entry) => entry.photo || entry.status === order.status);
 
   return (
     <div className="d-grid gap-4">
@@ -164,6 +191,39 @@ export default function OrderDetailPage() {
         onConfirm={cancel}
         onCancel={() => setConfirmingCancel(false)}
       />
+
+      {/*
+        * The page's own header, outside every panel. A single order is a
+        * document: it names itself once at the top, says when it was placed and
+        * what it came to, and keeps the one destructive action at arm's length
+        * on the right.
+        */}
+      <div>
+        <Link href="/account" className="small text-soft d-inline-flex align-items-center gap-1 mb-2">
+          <i className="bi bi-arrow-left" aria-hidden="true" />All orders
+        </Link>
+
+        <div className="d-flex flex-wrap align-items-start justify-content-between gap-3">
+          <div className="min-w-0">
+            <h1 className="h4 mb-1">Order {order.order_number}</h1>
+            <div className="small text-soft">
+              Placed {formatDateTime(order.placed_at)}
+              {itemCount > 0 && ` · ${itemCount} ${itemCount === 1 ? 'goat' : 'goats'}`}
+              {` · ${formatMoney(order.totals.total, settings)}`}
+            </div>
+          </div>
+
+          {order.is_cancellable && (
+            <button
+              className="btn btn-outline-danger btn-sm"
+              onClick={() => setConfirmingCancel(true)}
+              disabled={cancelling}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel order'}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Deliberately inline, not a modal. The buyer has just finished placing
           the order and wants to see it; a dialog puts a wall in front of the
@@ -223,208 +283,184 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      <div className="panel">
-        <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
-          <div>
-            <Link href="/account" className="small text-soft d-block mb-1">
-              <i className="bi bi-arrow-left me-1" />All orders
-            </Link>
-            <h1 className="h4 mb-1">{order.order_number}</h1>
-            <div className="small text-soft">Placed {formatDateTime(order.placed_at)}</div>
+      <div className="order-grid">
+        {/* Everything still in motion, in the order it happens. */}
+        <div className="order-grid__main">
+          <div className="panel">
+            <OrderTimeline
+              status={order.status}
+              paid={order.refund?.amount || 0}
+              refunded={order.refund?.sent || 0}
+              formatAmount={(amount) => formatMoney(amount, settings)}
+              estimate={order.shipping?.estimate}
+              deliveredAt={order.delivered_at}
+              formatWhen={formatDateTime}
+              history={order.history}
+              placedAt={order.placed_at}
+            />
+
+            {/* Nobody knows better than the buyer whether the goat is standing
+                in their yard, so let them say so instead of waiting on a phone
+                call being relayed to staff. Kept against the tracker, because
+                the tracker is the thing it moves. */}
+            {order.can_confirm_receipt && (
+              <div className="mt-4 pt-3 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span className="small text-soft">
+                  <i className="bi bi-house-check me-1" aria-hidden="true" />
+                  Has it arrived? Let us know and we will close the order.
+                </span>
+
+                <button
+                  type="button"
+                  className="btn btn-brand btn-sm px-3"
+                  onClick={() => setConfirmingReceipt(true)}
+                  disabled={receipting}
+                >
+                  {receipting ? 'Confirming…' : 'Yes, my goat arrived'}
+                </button>
+              </div>
+            )}
           </div>
 
-          {order.is_cancellable && (
-            <button
-              className="btn btn-outline-danger btn-sm"
-              onClick={() => setConfirmingCancel(true)}
-              disabled={cancelling}
-            >
-              {cancelling ? 'Cancelling…' : 'Cancel order'}
-            </button>
+          {/* What staff wrote and photographed as the order moved.
+              The tracker above says which step the order is on; this says what
+              actually happened at each one. It matters most at Preparing: the
+              listing photo was taken before the buyer ordered, and on a listing
+              sold by weight it may not even be the animal they are getting. */}
+          {updates.length > 0 && (
+            <div className="panel">
+              <h2 className="h6 mb-3">Updates from the farm</h2>
+
+              {updates.map((entry, index) => (
+                <div className="update-row" key={`${entry.status}-${entry.created_at}-${index}`}>
+                  {/* Only the step the order is actually on still has anything
+                      to say. Once it moves on, the heading and the note go and
+                      the photo is left to speak for itself -- each update named
+                      its own step and time, which on a finished order is a date
+                      stamp on a message nobody needs to read again. */}
+                  {entry.status === order.status && (
+                    <>
+                      <div className="update-row__meta">
+                        <span className="update-row__step">
+                          {BUYER_STATUS_LABELS[entry.status] || entry.label}
+                        </span>
+                        {entry.created_at && (
+                          <span className="update-row__when">{formatDateTime(entry.created_at)}</span>
+                        )}
+                      </div>
+
+                      {entry.note && <div className="small text-ink">{entry.note}</div>}
+                    </>
+                  )}
+
+                  {/* Big enough to actually see the animal. This is the only
+                      picture of the goat the buyer is really getting, so a
+                      thumbnail defeats the point of taking it. */}
+                  {entry.photo && (
+                    <a
+                      href={entry.photo}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="gallery__thumb d-block mt-1"
+                      style={{ width: '100%', maxWidth: 420, aspectRatio: '4 / 3' }}
+                    >
+                      <img
+                        src={entry.photo}
+                        alt={`Your goat at the ${BUYER_STATUS_LABELS[entry.status] || entry.label} step`}
+                      />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
-        </div>
 
-        <OrderTimeline
-          status={order.status}
-          paid={order.refund?.amount || 0}
-          refunded={order.refund?.sent || 0}
-          formatAmount={(amount) => formatMoney(amount, settings)}
-          estimate={order.shipping?.estimate}
-          deliveredAt={order.delivered_at}
-          formatWhen={formatDateTime}
-        />
+          <OrderPayment order={order} onPaid={load} />
 
-        {/* What staff wrote and photographed as the order moved.
-            The timeline above says which step the order is on; this says what
-            actually happened at each one. It matters most at Preparing: the
-            listing photo was taken before the buyer ordered, and on a listing
-            sold by weight it may not even be the animal they are getting. */}
-        {updates.length > 0 && (
-          <div className="mt-3 pt-3 border-top">
-            {/* Where the order is right now, in the timeline's own words. This
-                heading follows the status: move the order on and it changes
-                with it, rather than naming whichever step was written last. */}
-            <div className="fw-semibold text-ink mb-2">
-              {BUYER_STATUS_LABELS[order.status] || order.status_label}
-            </div>
+          <OrderRefund order={order} onRequested={load} />
 
-            <div className="d-grid gap-3">
-            {updates.map((entry, index) => (
-              <div key={`${entry.status}-${entry.created_at}-${index}`}>
-                {entry.note && <div className="small text-ink">{entry.note}</div>}
+          <div className="panel">
+            <h2 className="h6 mb-3">{itemCount === 1 ? 'Your goat' : 'Your goats'}</h2>
+            {order.items?.map((item, index) => (
+              <div className={`d-flex gap-3 py-3 ${index > 0 ? 'border-top' : ''}`} key={item.id}>
+                <div className="gallery__thumb" style={{ width: 72, aspectRatio: '1' }}>
+                  {item.thumbnail
+                    ? <img src={item.thumbnail} alt={item.name} />
+                    : <div className="card-goat__empty"><i className="bi bi-image" /></div>}
+                </div>
+                <div className="flex-grow-1 min-w-0">
+                  {item.slug
+                    ? <Link href={`/goats/${item.slug}`} className="fw-semibold text-body">{item.name}</Link>
+                    : <span className="fw-semibold">{item.name}</span>}
 
-                {/* Big enough to actually see the animal. This is the only
-                    picture of the goat the buyer is really getting, so a
-                    thumbnail defeats the point of taking it. */}
-                {entry.photo && (
-                  <a
-                    href={entry.photo}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="gallery__thumb d-block mt-2"
-                    style={{ width: '100%', maxWidth: 420, aspectRatio: '4 / 3' }}
-                  >
-                    <img
-                      src={entry.photo}
-                      alt={`Your goat at the ${BUYER_STATUS_LABELS[entry.status] || entry.label} step`}
-                    />
-                  </a>
-                )}
-              </div>
-            ))}
-            </div>
-          </div>
-        )}
+                  <div className="small text-soft">
+                    {item.sku}
+                    {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
+                    {` · Qty ${item.quantity}`}
+                  </div>
 
-        {/* Nobody knows better than the buyer whether the goat is standing in
-            their yard, so let them say so instead of waiting on a phone call
-            being relayed to staff. */}
-        {order.can_confirm_receipt && (
-          <div className="mt-3 pt-3 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <span className="small text-soft">
-              <i className="bi bi-house-check me-1" aria-hidden="true" />
-              Has it arrived? Let us know and we will close the order.
-            </span>
-
-            <button
-              type="button"
-              className="btn btn-brand btn-sm px-3"
-              onClick={() => setConfirmingReceipt(true)}
-              disabled={receipting}
-            >
-              {receipting ? 'Confirming…' : 'Yes, my goat arrived'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <OrderPayment order={order} onPaid={() => setReloads((count) => count + 1)} />
-
-      <OrderRefund order={order} onRequested={() => setReloads((count) => count + 1)} />
-
-      <div className="panel">
-        <h2 className="h6 mb-3">Items</h2>
-        {order.items?.map((item, index) => (
-          <div className={`d-flex gap-3 py-3 ${index > 0 ? 'border-top' : ''}`} key={item.id}>
-            <div className="gallery__thumb" style={{ width: 72, aspectRatio: '1' }}>
-              {item.thumbnail
-                ? <img src={item.thumbnail} alt={item.name} />
-                : <div className="card-goat__empty"><i className="bi bi-image" /></div>}
-            </div>
-            <div className="flex-grow-1">
-              {item.slug
-                ? <Link href={`/goats/${item.slug}`} className="fw-semibold text-body">{item.name}</Link>
-                : <span className="fw-semibold">{item.name}</span>}
-
-              <div className="small text-soft">
-                {item.sku}
-                {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
-                {` · Qty ${item.quantity}`}
-              </div>
-
-              {/* A live animal does not arrive at the weight it left at: it
-                  sheds gut fill and water on the road, and the scale at the
-                  far end is not the one it was weighed on. Both figures are
-                  shown, because hiding the second one is what makes a buyer
-                  think they were shortchanged. */}
-              {item.delivered_weight_kg != null && (
-                <div className="small mt-1">
-                  {item.weight_direction === 'same' ? (
-                    <span className="text-brand">
-                      <i className="bi bi-check-circle me-1" aria-hidden="true" />
-                      Weighed {item.delivered_weight_kg} kg at delivery — as ordered.
-                    </span>
-                  ) : (
-                    <span className="text-soft">
-                      <i className="bi bi-speedometer2 me-1" aria-hidden="true" />
-                      Ordered {item.weight_kg} kg · weighed{' '}
-                      <strong>{item.delivered_weight_kg} kg</strong> at delivery
-                      {item.weight_direction === 'increased' ? ' (heavier)' : ' (lighter)'}.
-                      {/* The money follows the scale, so say so on the same
-                          line. A changed total with no explanation beside it
-                          is the thing that generates the phone call. */}
-                      {item.price_adjustment != null && item.price_adjustment !== 0 && (
-                        <>
-                          {' '}
-                          <span className={item.price_adjustment < 0 ? 'text-brand' : 'text-warning'}>
-                            {item.price_adjustment < 0 ? '−' : '+'}
-                            {formatMoney(Math.abs(item.price_adjustment), settings)}
-                            {item.price_adjustment < 0 ? ' off' : ' added'}
-                          </span>
-                          {' — you pay '}
-                          <strong>{formatMoney(item.charged_total, settings)}</strong>.
-                        </>
+                  {/* A live animal does not arrive at the weight it left at: it
+                      sheds gut fill and water on the road, and the scale at the
+                      far end is not the one it was weighed on. Both figures are
+                      shown, because hiding the second one is what makes a buyer
+                      think they were shortchanged. */}
+                  {item.delivered_weight_kg != null && (
+                    <div className="small mt-1">
+                      {item.weight_direction === 'same' ? (
+                        <span className="text-brand">
+                          <i className="bi bi-check-circle me-1" aria-hidden="true" />
+                          Weighed {item.delivered_weight_kg} kg at delivery — as ordered.
+                        </span>
+                      ) : (
+                        <span className="text-soft">
+                          <i className="bi bi-speedometer2 me-1" aria-hidden="true" />
+                          Ordered {item.weight_kg} kg · weighed{' '}
+                          <strong>{item.delivered_weight_kg} kg</strong> at delivery
+                          {item.weight_direction === 'increased' ? ' (heavier)' : ' (lighter)'}.
+                          {/* The money follows the scale, so say so on the same
+                              line. A changed total with no explanation beside it
+                              is the thing that generates the phone call. */}
+                          {item.price_adjustment != null && item.price_adjustment !== 0 && (
+                            <>
+                              {' '}
+                              <span className={item.price_adjustment < 0 ? 'text-brand' : 'text-warning'}>
+                                {item.price_adjustment < 0 ? '−' : '+'}
+                                {formatMoney(Math.abs(item.price_adjustment), settings)}
+                                {item.price_adjustment < 0 ? ' off' : ' added'}
+                              </span>
+                              {' — you pay '}
+                              <strong>{formatMoney(item.charged_total, settings)}</strong>.
+                            </>
+                          )}
+                        </span>
                       )}
+                    </div>
+                  )}
+
+                  {item.supplied_by && (
+                    <div className="small text-soft">
+                      <i className="bi bi-shop me-1" aria-hidden="true" />
+                      Supplied by {item.supplied_by}
+                    </div>
+                  )}
+
+                  {item.fulfilment?.label && (
+                    <span className={`status-pill mt-2 d-inline-block ${ITEM_PROGRESS[item.fulfilment.status] || 'text-bg-secondary'}`}>
+                      {item.fulfilment.label}
                     </span>
                   )}
                 </div>
-              )}
-
-              {item.supplied_by && (
-                <div className="small text-soft">
-                  <i className="bi bi-shop me-1" aria-hidden="true" />
-                  Supplied by {item.supplied_by}
-                </div>
-              )}
-
-              {item.fulfilment?.label && (
-                <span className={`status-pill mt-2 d-inline-block ${ITEM_PROGRESS[item.fulfilment.status] || 'text-bg-secondary'}`}>
-                  {item.fulfilment.label}
-                </span>
-              )}
-            </div>
-            <div className="fw-bold">{formatMoney(item.line_total, settings)}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="row g-4">
-        <div className="col-md-6">
-          <div className="panel h-100">
-            <h2 className="h6 mb-3">Delivery address</h2>
-            <address className="mb-0 small">
-              <strong>{order.customer.name}</strong><br />
-              {order.customer.phone}<br />
-              {order.shipping.address_line}<br />
-              {order.shipping.area && <>{order.shipping.area}<br /></>}
-              {order.shipping.city} {order.shipping.postal_code}
-            </address>
-            {order.shipping.zone && (
-              <p className="small text-soft mt-2 mb-0">
-                <i className="bi bi-geo-alt me-1" aria-hidden="true" />
-                {order.shipping.zone}
-              </p>
-            )}
-
-            {order.shipping.notes && (
-              <p className="small text-soft mt-2 mb-0"><em>{order.shipping.notes}</em></p>
-            )}
+                <div className="fw-bold">{formatMoney(item.line_total, settings)}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="col-md-6">
-          <div className="panel h-100">
-            <h2 className="h6 mb-3">Payment</h2>
+        {/* The record: what is owed, and where it is going. Settled facts, so
+            they sit apart from the half of the page that is still changing. */}
+        <aside className="order-grid__aside">
+          <div className="panel">
+            <h2 className="h6 mb-3">Order summary</h2>
             <dl className="row small mb-0">
               <dt className="col-7 fw-normal text-soft">Method</dt>
               <dd className="col-5 text-end">
@@ -518,7 +554,28 @@ export default function OrderDetailPage() {
               )}
             </dl>
           </div>
-        </div>
+
+          <div className="panel">
+            <h2 className="h6 mb-3">Delivery address</h2>
+            <address className="mb-0 small">
+              <strong>{order.customer.name}</strong><br />
+              {order.customer.phone}<br />
+              {order.shipping.address_line}<br />
+              {order.shipping.area && <>{order.shipping.area}<br /></>}
+              {order.shipping.city} {order.shipping.postal_code}
+            </address>
+            {order.shipping.zone && (
+              <p className="small text-soft mt-2 mb-0">
+                <i className="bi bi-geo-alt me-1" aria-hidden="true" />
+                {order.shipping.zone}
+              </p>
+            )}
+
+            {order.shipping.notes && (
+              <p className="small text-soft mt-2 mb-0"><em>{order.shipping.notes}</em></p>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );

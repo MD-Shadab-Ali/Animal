@@ -77,6 +77,9 @@ class GatewayPaymentTest extends TestCase
 
         $number = $this->postJson('/api/v1/checkout', [
             'customer_name'    => 'Rahim Uddin',
+            'customer_email'   => 'rahim@example.test',
+            'area'             => 'Ward 4',
+            'postal_code'      => '44600',
             'customer_phone'   => '+977 9800-111111',
             'address_line'     => 'House 12',
             'city'             => 'Kathmandu',
@@ -166,6 +169,9 @@ class GatewayPaymentTest extends TestCase
 
         $this->postJson('/api/v1/checkout', [
             'customer_name'    => 'Rahim Uddin',
+            'customer_email'   => 'rahim@example.test',
+            'area'             => 'Ward 4',
+            'postal_code'      => '44600',
             'customer_phone'   => '+977 9800-111111',
             'address_line'     => 'House 12',
             'city'             => 'Kathmandu',
@@ -314,6 +320,46 @@ class GatewayPaymentTest extends TestCase
         $settled = app(GatewayPaymentService::class)->settle('khalti', $payment->gateway_ref);
 
         $this->assertSame('confirmed', $settled->status);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+    }
+
+    /**
+     * Khalti's redirect quotes the reference we opened with, not the pidx.
+     *
+     * start() swaps our reference for the pidx, because that is what lookup
+     * expects. The redirect then comes back carrying purchase_order_id -- our
+     * *old* reference -- and matching on that found no payment at all, so a
+     * genuinely paid order sat in the admin panel waiting to be confirmed by
+     * hand. Both identifiers are tried now.
+     */
+    public function test_a_khalti_redirect_is_matched_by_its_pidx(): void
+    {
+        $order = $this->placeOrder('khalti');
+
+        $ourReference = 'GH-OLD-REFERENCE';
+        $pidx = 'PIDXAFTERINITIATE';
+
+        $payment = $this->attempt($order, gateway: 'khalti');
+        // Exactly what start() leaves behind: the row keyed on the pidx.
+        $payment->forceFill(['gateway_ref' => $pidx])->save();
+
+        Http::fake(['*khalti.com/api/v2/epayment/lookup*' => Http::response([
+            'pidx' => $pidx,
+            'total_amount' => KhaltiGateway::toPaisa((float) $order->total),
+            'status' => 'Completed',
+            'transaction_id' => 'ng928sarvK2QDmZdt4XB6U',
+        ])]);
+
+        // Khalti sends both, and the stale one first.
+        $response = $this->get('/api/v1/payments/khalti/return?'.http_build_query([
+            'purchase_order_id' => $ourReference,
+            'pidx' => $pidx,
+            'status' => 'Completed',
+            'transaction_id' => 'ng928sarvK2QDmZdt4XB6U',
+        ]));
+
+        $this->assertStringContainsString('payment=success', $response->headers->get('Location'));
+        $this->assertSame('confirmed', $payment->fresh()->status);
         $this->assertSame('paid', $order->fresh()->payment_status);
     }
 

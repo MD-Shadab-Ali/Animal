@@ -47,6 +47,9 @@ class SellerFulfilmentTest extends TestCase
 
         $number = $this->postJson('/api/v1/checkout', [
             'customer_name' => 'Rahim Uddin', 'customer_phone' => '+880 1811-111111',
+            'customer_email' => 'rahim@example.test',
+            'area' => 'Ward 4',
+            'postal_code' => '44600',
             'address_line' => 'House 12', 'city' => 'Dhaka',
             'delivery_zone_id' => DeliveryZone::active()->firstOrFail()->id,
             'payment_method' => 'cod',

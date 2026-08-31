@@ -1,9 +1,11 @@
 'use client';
 
+import { AnimatePresence, m } from 'motion/react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api';
+import { TRANSITION, disclosure } from '@/lib/motion';
 
 const BADGE = {
   pending: 'text-bg-secondary',
@@ -89,20 +91,34 @@ export default function FulfilmentControl({ item, onUpdated }) {
             </button>
           </div>
 
-          {showNote && (
-            <div className="mt-2">
-              <label className="visually-hidden" htmlFor={`note-${item.id}`}>Note for our team</label>
-              <input
-                id={`note-${item.id}`}
-                className="form-control form-control-sm"
-                placeholder="Anything our collection team should know?"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                maxLength={500}
-              />
-              <div className="form-text">Sent to us with your next update.</div>
-            </div>
-          )}
+          {/* Opens by growing rather than by appearing, so the rows of the
+              order list below do not jump a notch each time it is toggled. */}
+          <AnimatePresence initial={false}>
+            {showNote && (
+              <m.div
+                key="note"
+                variants={disclosure}
+                initial="hidden"
+                animate="shown"
+                exit="hidden"
+                transition={TRANSITION.fast}
+                style={{ overflow: 'hidden' }}
+              >
+                <div className="mt-2">
+                  <label className="visually-hidden" htmlFor={`note-${item.id}`}>Note for our team</label>
+                  <input
+                    id={`note-${item.id}`}
+                    className="form-control form-control-sm"
+                    placeholder="Anything our collection team should know?"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    maxLength={500}
+                  />
+                  <div className="form-text">Sent to us with your next update.</div>
+                </div>
+              </m.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </div>

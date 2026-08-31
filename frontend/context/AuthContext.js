@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ApiError, apiFetch } from '@/lib/api';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 const TOKEN_KEY = 'gh_token';
 const AuthContext = createContext(null);
@@ -126,6 +127,13 @@ export function AuthProvider({ children }) {
     setUser(response.data);
     return response.data;
   }, [token]);
+
+  /*
+   * Staff can rename an account, change what it is allowed to do, or switch it
+   * off. Re-asking when the tab comes back keeps the header, the seller
+   * prompts and the profile page honest about it.
+   */
+  useLiveRefresh(refreshUser, { enabled: Boolean(token), intervalMs: 0 });
 
   const value = useMemo(
     () => ({

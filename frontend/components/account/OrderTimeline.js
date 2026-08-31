@@ -21,12 +21,26 @@ export const BUYER_STATUS_LABELS = {
 
 // The progression, in order. Cancelled is a status but not a step.
 const STEPS = [
-  ['pending', BUYER_STATUS_LABELS.pending],
-  ['confirmed', BUYER_STATUS_LABELS.confirmed],
-  ['processing', BUYER_STATUS_LABELS.processing],
-  ['out_for_delivery', BUYER_STATUS_LABELS.out_for_delivery],
-  ['delivered', BUYER_STATUS_LABELS.delivered],
+  ['pending', BUYER_STATUS_LABELS.pending, 'bi-bag-check'],
+  ['confirmed', BUYER_STATUS_LABELS.confirmed, 'bi-patch-check'],
+  ['processing', BUYER_STATUS_LABELS.processing, 'bi-box-seam'],
+  ['out_for_delivery', BUYER_STATUS_LABELS.out_for_delivery, 'bi-truck'],
+  ['delivered', BUYER_STATUS_LABELS.delivered, 'bi-house-check'],
 ];
+
+/*
+ * The headline. Every large storefront leads its order page with the state in
+ * plain words rather than with the order number -- "where is my goat" is the
+ * question the page is opened to answer, and a reference code answers a
+ * different one.
+ */
+const HEADLINES = {
+  pending: 'Order placed',
+  confirmed: 'Order confirmed',
+  processing: 'Preparing your goat',
+  out_for_delivery: 'On the way to you',
+  delivered: 'Delivered',
+};
 
 export default function OrderTimeline({
   status,
@@ -38,6 +52,11 @@ export default function OrderTimeline({
   estimate = null,
   deliveredAt = null,
   formatWhen,
+  // Every status change staff have recorded, which is where each step gets the
+  // time it happened. A tracker that dates its steps is the difference between
+  // "something is happening" and knowing when it did.
+  history = [],
+  placedAt = null,
 }) {
   if (status === 'cancelled') {
     // "Nothing has been charged" is only true when nothing was. Telling a buyer
@@ -62,6 +81,21 @@ export default function OrderTimeline({
 
   const currentIndex = STEPS.findIndex(([key]) => key === status);
 
+  /*
+   * When each step happened. The first entry for a status is the one that
+   * counts: an order sent back a step and moved on again reached "Preparing"
+   * when it first got there, not on the retry.
+   */
+  const reachedAt = (key) => {
+    const entry = (history || []).find((row) => row.status === key);
+
+    if (entry?.created_at) return entry.created_at;
+    if (key === 'pending') return placedAt;
+    if (key === 'delivered') return deliveredAt;
+
+    return null;
+  };
+
   // "When does my goat get here" is the question this part of the page exists
   // to answer. An estimate that stops being shown the moment it starts to
   // matter is not much of a promise.
@@ -83,27 +117,55 @@ export default function OrderTimeline({
 
   return (
     <>
-      <ol className="timeline list-unstyled mb-0">
-        {STEPS.map(([key, label], index) => {
+      <div className="tracker__head">
+        <span className={`tracker__badge ${status === 'delivered' ? 'is-done' : ''}`} aria-hidden="true">
+          <i className={`bi ${STEPS[currentIndex]?.[2] || 'bi-bag-check'}`} />
+        </span>
+
+        <div className="min-w-0">
+          <h2 className="tracker__title">{HEADLINES[status] || BUYER_STATUS_LABELS[status] || status}</h2>
+
+          {arrival && (
+            <p className="tracker__lead">
+              <i className={`bi ${status === 'delivered' ? 'bi-check-circle' : 'bi-truck'} me-1`} aria-hidden="true" />
+              {arrival}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <ol className="tracker" aria-label="Order progress">
+        {STEPS.map(([key, label, icon], index) => {
           const done = index <= currentIndex;
+          const current = index === currentIndex;
+          const at = reachedAt(key);
 
           return (
-            <li className={`timeline__step ${done ? 'is-done' : ''}`} key={key}>
-              <span className="timeline__dot" aria-hidden="true">
-                <i className={`bi ${done ? 'bi-check-lg' : 'bi-circle'}`} />
+            <li
+              className={`tracker__step ${done ? 'is-done' : ''} ${current ? 'is-current' : ''}`}
+              key={key}
+              aria-current={current ? 'step' : undefined}
+            >
+              <span className="tracker__dot" aria-hidden="true">
+                <i className={`bi ${done && !current ? 'bi-check-lg' : icon}`} />
               </span>
-              <span>{label}</span>
+
+              <span className="tracker__label">
+                {label}
+                <span className="visually-hidden">
+                  {current ? ' — current step' : done ? ' — done' : ' — not yet'}
+                </span>
+              </span>
+
+              {/* Dated from what staff actually recorded, so a step with no
+                  entry behind it stays blank rather than inventing a time. */}
+              <span className="tracker__when">
+                {at && formatWhen ? formatWhen(at) : ''}
+              </span>
             </li>
           );
         })}
       </ol>
-
-      {arrival && (
-        <p className="small text-soft mt-3 mb-0">
-          <i className={`bi ${status === 'delivered' ? 'bi-check-circle' : 'bi-truck'} me-1`} aria-hidden="true" />
-          {arrival}
-        </p>
-      )}
     </>
   );
 }

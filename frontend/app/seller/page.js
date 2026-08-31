@@ -1,24 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 export default function SellerDashboard() {
   const { token } = useAuth();
   const settings = useSettings();
   const [stats, setStats] = useState(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) return;
 
-    apiFetch('/seller/dashboard', { token })
-      .then((response) => setStats(response.data))
-      .catch(() => setStats(false));
+    try {
+      const response = await apiFetch('/seller/dashboard', { token });
+      setStats(response.data);
+    } catch {
+      setStats(false);
+    }
   }, [token]);
+
+  // Every number here is downstream of something staff do: confirming an
+  // order, approving a listing, paying a payout.
+  useLiveRefresh(load, { immediate: true, enabled: Boolean(token) });
 
   if (stats === null) {
     return <div className="panel text-center py-5"><span className="spinner-border text-brand" /></div>;
@@ -31,10 +39,13 @@ export default function SellerDashboard() {
   const { listings, sales, earnings } = stats;
 
   const tiles = [
-    ['Live listings', listings.live, 'bi-shop', 'Visible in the shop now'],
-    ['Awaiting review', listings.pending, 'bi-hourglass-split', 'With our team'],
-    ['Goats sold', listings.sold, 'bi-check2-circle', `${sales.units} unit${sales.units === 1 ? '' : 's'}`],
-    ['Needs attention', listings.rejected, 'bi-exclamation-triangle', 'Sent back to you'],
+    ['Live listings', listings.live, 'bi-shop', 'Visible in the shop now', ''],
+    ['Awaiting review', listings.pending, 'bi-hourglass-split', 'With our team', ''],
+    ['Goats sold', listings.sold, 'bi-check2-circle', `${sales.units} unit${sales.units === 1 ? '' : 's'}`, ''],
+    // The only tile that ever asks for anything. It says so when it has
+    // something to ask, and stays quiet at zero like the rest.
+    ['Needs attention', listings.rejected, 'bi-exclamation-triangle', 'Sent back to you',
+      listings.rejected > 0 ? 'stat-tile--warn' : ''],
   ];
 
   return (
@@ -49,16 +60,18 @@ export default function SellerDashboard() {
       {/* One across on a phone: at 390px two of these cards left the
           right-hand pair clipped at the screen edge. */}
       <div className="row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-3">
-        {tiles.map(([label, value, icon, hint]) => (
+        {tiles.map(([label, value, icon, hint, tone]) => (
           <div className="col" key={label}>
-            <div className="panel h-100">
-              <span className="step__icon mb-2" style={{ width: 40, height: 40, fontSize: '1.05rem', margin: 0 }}>
-                <i className={`bi ${icon}`} aria-hidden="true" />
+            {/* Icon beside the figure rather than stacked above it: four of
+                these read as one dashboard row, not as four separate cards. */}
+            <div className={`stat-tile ${tone}`}>
+              <span className="stat-tile__icon" aria-hidden="true">
+                <i className={`bi ${icon}`} />
               </span>
-              <div className="stat-block text-start mt-2">
-                <b style={{ fontSize: '1.75rem' }}>{value}</b>
-                <span className="d-block fw-semibold text-ink small">{label}</span>
-                <span className="d-block small text-soft">{hint}</span>
+              <div className="min-w-0">
+                <div className="stat-tile__value">{value}</div>
+                <div className="stat-tile__label">{label}</div>
+                <div className="stat-tile__hint">{hint}</div>
               </div>
             </div>
           </div>
@@ -70,12 +83,14 @@ export default function SellerDashboard() {
           <div className="panel h-100">
             <h2 className="h6 mb-3">Earnings</h2>
 
-            <dl className="row mb-0">
-              <dt className="col-7 fw-normal text-soft">Ready to be paid out</dt>
-              <dd className="col-5 text-end fw-bold text-brand h5 mb-2">
-                {formatMoney(earnings.unpaid, settings)}
-              </dd>
+            {/* The one figure a seller opens this page for. It was row one of
+                a five-row list, weighted the same as the commission rate. */}
+            <div className="mb-3 pb-3 border-bottom">
+              <div className="small text-soft">Ready to be paid out</div>
+              <div className="price-now">{formatMoney(earnings.unpaid, settings)}</div>
+            </div>
 
+            <dl className="row mb-0">
               <dt className="col-7 fw-normal text-soft">
                 Awaiting delivery
                 <span className="d-block small">not earned yet</span>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useSeller } from '@/context/SellerContext';
@@ -28,6 +28,11 @@ export default function Header({ site }) {
   // mid-range Android. The observer fires twice, when the sentinel crosses.
   const sentinel = useRef(null);
   const [stuck, setStuck] = useState(false);
+
+  // The drawer's open state lives here rather than in the DOM, so the drawer
+  // itself no longer has to ask Bootstrap to close it.
+  const [navOpen, setNavOpen] = useState(false);
+  const closeNav = useCallback(() => setNavOpen(false), []);
 
   useEffect(() => {
     const target = sentinel.current;
@@ -116,8 +121,16 @@ export default function Header({ site }) {
                     >
                       <i className="bi bi-person" aria-hidden="true" />
                     </button>
-                    <ul className="dropdown-menu dropdown-menu-end shadow border-0 mt-2" style={{ borderRadius: 'var(--radius-lg)' }}>
-                      <li className="dropdown-header text-ink fw-semibold">{user?.name}</li>
+                    <ul className="dropdown-menu dropdown-menu-end shadow border-0 mt-2" style={{ borderRadius: 'var(--radius-lg)', minWidth: '15rem' }}>
+                      {/* Name and email together. This menu is where someone
+                          checks whose account they are about to order a goat
+                          from, and a first name alone does not settle that on
+                          a machine a household shares. */}
+                      <li className="px-3 py-2">
+                        <div className="fw-semibold text-ink text-truncate">{user?.name}</div>
+                        {user?.email && <div className="small text-soft text-truncate">{user.email}</div>}
+                      </li>
+                      <li><hr className="dropdown-divider" /></li>
 
                       {/* Staff arrive here like anyone else; this is the only
                           signpost back to the panel they actually work in. */}
@@ -150,12 +163,41 @@ export default function Header({ site }) {
                         </>
                       )}
 
-                      <li><Link className="dropdown-item" href="/account">My orders</Link></li>
-                      <li><Link className="dropdown-item" href="/account/wishlist">Wishlist</Link></li>
-                      <li><Link className="dropdown-item" href="/account/addresses">Addresses</Link></li>
-                      <li><Link className="dropdown-item" href="/account/profile">Profile</Link></li>
+                      {/* The same destinations, in the same order and under
+                          the same icons, as the account sidebar. Two
+                          vocabularies for one account is how a menu starts
+                          feeling like a different site. */}
+                      <li>
+                        <Link className="dropdown-item" href="/account">
+                          <i className="bi bi-box-seam me-2" aria-hidden="true" />My orders
+                        </Link>
+                      </li>
+                      <li>
+                        <Link className="dropdown-item" href="/account/payments">
+                          <i className="bi bi-credit-card me-2" aria-hidden="true" />Payments
+                        </Link>
+                      </li>
+                      <li>
+                        <Link className="dropdown-item" href="/account/wishlist">
+                          <i className="bi bi-heart me-2" aria-hidden="true" />Wishlist
+                        </Link>
+                      </li>
+                      <li>
+                        <Link className="dropdown-item" href="/account/addresses">
+                          <i className="bi bi-geo-alt me-2" aria-hidden="true" />Addresses
+                        </Link>
+                      </li>
+                      <li>
+                        <Link className="dropdown-item" href="/account/profile">
+                          <i className="bi bi-person me-2" aria-hidden="true" />Profile
+                        </Link>
+                      </li>
                       <li><hr className="dropdown-divider" /></li>
-                      <li><button className="dropdown-item text-danger" onClick={logout}>Sign out</button></li>
+                      <li>
+                        <button className="dropdown-item text-danger" onClick={logout}>
+                          <i className="bi bi-box-arrow-right me-2" aria-hidden="true" />Sign out
+                        </button>
+                      </li>
                     </ul>
                   </div>
                 ) : (
@@ -167,9 +209,8 @@ export default function Header({ site }) {
                 <button
                   className="icon-btn d-lg-none"
                   type="button"
-                  data-bs-toggle="offcanvas"
-                  data-bs-target="#mobileNav"
-                  aria-controls="mobileNav"
+                  onClick={() => setNavOpen(true)}
+                  aria-expanded={navOpen}
                   aria-label="Open menu"
                 >
                   <i className="bi bi-list" aria-hidden="true" />
@@ -191,6 +232,8 @@ export default function Header({ site }) {
        * the menu opened as a sliver with ten links crammed into a 32px scroll.
        */}
       <MobileNav
+        open={navOpen}
+        onClose={closeNav}
         navigation={navigation}
         settings={settings}
         isAuthenticated={isAuthenticated}

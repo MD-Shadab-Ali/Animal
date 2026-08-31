@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\GatewayPaymentController;
 use App\Http\Controllers\Api\V1\GoatController;
 use App\Http\Controllers\Api\V1\HomeController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PasswordResetController;
 use App\Http\Controllers\Api\V1\ReviewController;
 use App\Http\Controllers\Api\V1\SellerAccountController;
@@ -132,6 +133,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('checkout.store');
 
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
+
+        // Every payment and refund the buyer has made, across all their orders.
+        // The per-order history answers "is this one settled"; this answers
+        // "what have I paid this shop", which no order page can.
+        Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
         Route::get('orders/{orderNumber}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('orders/{orderNumber}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
         Route::post('orders/{orderNumber}/received', [OrderController::class, 'confirmReceipt'])

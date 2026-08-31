@@ -46,6 +46,18 @@ class Payment extends Model
         'rejected' => 'Declined',
     ];
 
+    /**
+     * Who put this row here.
+     *
+     * Worth telling apart in the ledger: "gateway" means nobody vouched for
+     * it, a provider was asked and answered.
+     */
+    public const SOURCES = [
+        'customer' => 'From customer',
+        'staff' => 'Recorded by staff',
+        'gateway' => 'Confirmed by gateway',
+    ];
+
     public const TYPES = [
         'payment' => 'Payment',
         'refund' => 'Refund',

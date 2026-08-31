@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 import PayoutPanel from '@/components/seller/PayoutPanel';
 
 const sum = (rows, key) => rows.reduce((total, row) => total + Number(row[key] || 0), 0);
@@ -18,21 +19,26 @@ export default function SellerEarningsPage() {
 
   // Bumped after a payout is requested or the payout details change, so the
   // balances, the history and the button state all reload together.
-  const [reloads, setReloads] = useState(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) return;
 
-    Promise.all([
-      apiFetch('/seller/earnings', { token }),
-      apiFetch('/seller/payouts', { token }),
-    ])
-      .then(([earningsResponse, payoutsResponse]) => {
-        setEarnings(earningsResponse.data);
-        setPayouts(payoutsResponse.data || []);
-      })
-      .catch(() => setEarnings(false));
-  }, [token, reloads]);
+    try {
+      const [earningsResponse, payoutsResponse] = await Promise.all([
+        apiFetch('/seller/earnings', { token }),
+        apiFetch('/seller/payouts', { token }),
+      ]);
+
+      setEarnings(earningsResponse.data);
+      setPayouts(payoutsResponse.data || []);
+    } catch {
+      setEarnings(false);
+    }
+  }, [token]);
+
+  // A seller who has requested a payout is waiting on somebody in the admin
+  // panel to approve and send it. This is the page they sit on to find out.
+  useLiveRefresh(load, { immediate: true, enabled: Boolean(token) });
 
   if (earnings === null) {
     return <div className="panel text-center py-5"><span className="spinner-border text-brand" /></div>;
@@ -43,7 +49,8 @@ export default function SellerEarningsPage() {
   }
 
   const { summary, lines, payout } = earnings;
-  const reload = () => setReloads((count) => count + 1);
+  // What PayoutPanel calls after requesting a payout.
+  const reload = load;
 
   return (
     <div className="d-grid gap-4">

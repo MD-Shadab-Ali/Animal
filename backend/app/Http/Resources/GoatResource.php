@@ -76,6 +76,16 @@ class GoatResource extends JsonResource
             // Only sent from the detail endpoint.
             'description'       => $this->when($request->routeIs('*.goats.show'), $this->description),
             'images'            => GoatImageResource::collection($this->whenLoaded('images')),
+
+            // The gallery as it should actually be shown -- see gallery()
+            // below. Which photos those are is a rule about our own data, so it
+            // belongs here rather than in whatever happens to be rendering
+            // them: a client that merges `thumbnail` and `images` itself has to
+            // know the rule, and gets it wrong the moment nobody remembers.
+            'gallery'           => $this->when(
+                $request->routeIs('*.goats.show') && $this->resource->relationLoaded('images'),
+                fn () => $this->gallery(),
+            ),
             'reviews'           => ReviewResource::collection($this->whenLoaded('approvedReviews')),
             'rating'            => $this->whenLoaded('approvedReviews', fn () => [
                 'average' => round((float) $this->approvedReviews->avg('rating'), 1),
@@ -87,5 +97,45 @@ class GoatResource extends JsonResource
                 'description' => $this->meta_description ?: $this->short_description,
             ],
         ];
+    }
+
+    /**
+     * The thumbnail first, then the gallery, with no photo listed twice.
+     *
+     * `goats.thumbnail` means two different things depending on who made the
+     * listing. When a seller uploads, their first photo is copied into it so
+     * the shop grid and every order line have something to show -- so the
+     * thumbnail and the first gallery row are the same file. Staff upload a
+     * thumbnail on its own in the admin form, where it is a genuine extra
+     * photo that appears nowhere in the gallery.
+     *
+     * Show both and a seller's single photo appears twice; show only the
+     * gallery and a staff listing loses its main image. Keeping the first
+     * sighting of each URL is the one rule that is right for both, and the
+     * comparison is exact: thumbnail_url and GoatImage::url are the same
+     * asset('storage/'.$path) call.
+     *
+     * @return list<array{id: int|string, url: string, alt: string|null}>
+     */
+    private function gallery(): array
+    {
+        $gallery = [];
+        $seen    = [];
+
+        if ($this->thumbnail_url) {
+            $gallery[] = ['id' => 'main', 'url' => $this->thumbnail_url, 'alt' => $this->name];
+            $seen[$this->thumbnail_url] = true;
+        }
+
+        foreach ($this->resource->images as $image) {
+            if (! $image->url || isset($seen[$image->url])) {
+                continue;
+            }
+
+            $seen[$image->url] = true;
+            $gallery[] = ['id' => $image->id, 'url' => $image->url, 'alt' => $image->alt];
+        }
+
+        return $gallery;
     }
 }

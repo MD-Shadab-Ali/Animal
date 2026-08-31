@@ -66,8 +66,18 @@ class GatewayPaymentController extends Controller
      */
     public function returned(Request $request, string $gateway)
     {
-        $reference = $this->referenceFrom($request, $gateway);
-        $payment = $reference ? $this->gateways->settle($gateway, $reference) : null;
+        // Try each thing the provider might have called this attempt, because
+        // getting it wrong is silent: settle() simply finds no payment and the
+        // buyer is told nothing happened.
+        $payment = null;
+
+        foreach ($this->referencesFrom($request, $gateway) as $reference) {
+            $payment = $this->gateways->settle($gateway, $reference);
+
+            if ($payment) {
+                break;
+            }
+        }
 
         $status = match ($payment?->status) {
             'confirmed' => 'success',
@@ -88,21 +98,34 @@ class GatewayPaymentController extends Controller
     }
 
     /**
-     * Each provider names the attempt differently on the way back.
+     * Everything the provider might be calling this attempt, best first.
+     *
+     * Khalti is asked to open a payment under our own reference and answers
+     * with a pidx, which then *replaces* that reference on the row -- the pidx
+     * is what its lookup call expects. But its redirect quotes back the
+     * original purchase_order_id as well, and matching on that found nothing,
+     * so a paid order sat there asking to be confirmed by hand. Both are tried
+     * now, and whichever finds the payment wins.
      */
-    private function referenceFrom(Request $request, string $gateway): ?string
+    private function referencesFrom(Request $request, string $gateway): array
     {
         if ($gateway === 'khalti') {
-            return $request->query('purchase_order_id') ?: $request->query('pidx');
+            return array_values(array_filter([
+                $request->query('pidx'),
+                $request->query('purchase_order_id'),
+            ]));
         }
 
         if ($gateway === 'esewa') {
             // eSewa returns one base64 blob rather than separate parameters.
             $decoded = json_decode(base64_decode((string) $request->query('data'), true) ?: '[]', true);
 
-            return $decoded['transaction_uuid'] ?? null;
+            return array_values(array_filter([
+                $decoded['transaction_uuid'] ?? null,
+                $request->query('transaction_uuid'),
+            ]));
         }
 
-        return null;
+        return [];
     }
 }

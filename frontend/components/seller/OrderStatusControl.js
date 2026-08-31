@@ -1,9 +1,11 @@
 'use client';
 
+import { AnimatePresence, m } from 'motion/react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api';
+import { TRANSITION, disclosure } from '@/lib/motion';
 
 /**
  * Order-level control, shown only for orders this seller supplied in full.
@@ -89,19 +91,34 @@ export default function OrderStatusControl({ order, onUpdated }) {
         </button>
       </div>
 
-      {showNote && (
-        <div className="mt-2">
-          <label className="visually-hidden" htmlFor={`order-note-${order.order_number}`}>Note</label>
-          <input
-            id={`order-note-${order.order_number}`}
-            className="form-control form-control-sm"
-            placeholder="Anything our team should know?"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            maxLength={500}
-          />
-        </div>
-      )}
+      {/* The note pushes the paragraph below it down, so it opens by growing
+          rather than by appearing -- otherwise the line about cancellations
+          jumps a row every time the button is pressed. */}
+      <AnimatePresence initial={false}>
+        {showNote && (
+          <m.div
+            key="note"
+            variants={disclosure}
+            initial="hidden"
+            animate="shown"
+            exit="hidden"
+            transition={TRANSITION.fast}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="mt-2">
+              <label className="visually-hidden" htmlFor={`order-note-${order.order_number}`}>Note</label>
+              <input
+                id={`order-note-${order.order_number}`}
+                className="form-control form-control-sm"
+                placeholder="Anything our team should know?"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                maxLength={500}
+              />
+            </div>
+          </m.div>
+        )}
+      </AnimatePresence>
 
       <p className="small text-soft mb-0 mt-2">
         Need this order cancelled? <a href="/contact">Ask our team</a> — sellers cannot cancel a buyer&apos;s order.

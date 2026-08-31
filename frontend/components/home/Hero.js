@@ -1,9 +1,11 @@
 'use client';
 
+import { AnimatePresence, m } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettings } from '@/context/SiteContext';
+import { TRANSITION, swipeDirection } from '@/lib/motion';
 
 // What buyers in Nepal actually search for.
 const POPULAR = [
@@ -157,9 +159,46 @@ export default function Hero({ banners = [] }) {
                 )}
 
                 <figure className="carousel-hero__slide">
-                  {slide.image
-                    ? <img src={slide.image} alt={slide.title || ''} />
-                    : <div className="hero__media-empty"><i className="bi bi-flower3" aria-hidden="true" /></div>}
+                  {/*
+                    * mode="sync" is the one case where overlap is the point:
+                    * the outgoing banner has to still be there for the
+                    * incoming one to fade over, or the frame flashes empty.
+                    *
+                    * The drag lives on this inner layer rather than on the
+                    * figure around it. The figure is what clips -- dragging it
+                    * would move the whole framed box and could push the page
+                    * sideways on a phone; dragging inside the frame cannot
+                    * escape it. touchAction: pan-y leaves vertical scrolling
+                    * to the browser, so a swipe down the page still scrolls.
+                    */}
+                  <AnimatePresence initial={false} mode="sync">
+                    <m.div
+                      key={active}
+                      className="carousel-hero__media"
+                      drag={many ? 'x' : false}
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.18}
+                      dragMomentum={false}
+                      style={{ touchAction: 'pan-y' }}
+                      onDragStart={() => setPaused(true)}
+                      onDragEnd={(event, info) => {
+                        setPaused(false);
+
+                        const move = swipeDirection(info);
+
+                        if (move === 1) next();
+                        if (move === -1) prev();
+                      }}
+                      initial={{ opacity: 0, scale: 1.03 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={TRANSITION.ambient}
+                    >
+                      {slide.image
+                        ? <img src={slide.image} alt={slide.title || ''} draggable={false} />
+                        : <div className="hero__media-empty"><i className="bi bi-flower3" aria-hidden="true" /></div>}
+                    </m.div>
+                  </AnimatePresence>
 
                   <div className="carousel-hero__scrim" aria-hidden="true" />
 

@@ -12,8 +12,8 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -58,7 +58,6 @@ class PaymentsRelationManager extends RelationManager
 
                 TextColumn::make('transaction_reference')->label('Reference')->placeholder('—'),
 
-
                 // Whether there is anything to look at, and a way straight to it.
                 TextColumn::make('proof')
                     ->label('Receipt')
@@ -77,7 +76,7 @@ class PaymentsRelationManager extends RelationManager
                 TextColumn::make('source')
                     ->badge()
                     ->color('gray')
-                    ->formatStateUsing(fn (?string $state) => $state === 'customer' ? 'From customer' : 'Recorded by staff'),
+                    ->formatStateUsing(fn (?string $state) => Payment::SOURCES[$state] ?? $state),
 
                 TextColumn::make('created_at')->label('Added')->since(),
             ])

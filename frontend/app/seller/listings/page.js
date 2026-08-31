@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import ListingStatusPill from '@/components/seller/ListingStatusPill';
 import { useAuth } from '@/context/AuthContext';
@@ -10,6 +10,7 @@ import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { formatMoney } from '@/lib/format';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 // Listing states, not approval statuses — "Live" and "Sold" are both approved,
 // and a seller needs to tell them apart more than anything else on this screen.
@@ -35,10 +36,15 @@ function ListingsInner() {
   const [busy, setBusy] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
-  const load = useCallback(async (status) => {
+  /*
+   * One fetch, closing over the filter, instead of the two that were here: a
+   * callback the actions used and an effect doing the same request. Changing
+   * the filter changes this callback, which is what re-runs it.
+   */
+  const load = useCallback(async () => {
     if (!token) return;
 
-    const query = status ? `?state=${status}` : '';
+    const query = filter ? `?state=${filter}` : '';
 
     try {
       const response = await apiFetch(`/seller/listings${query}`, { token });
@@ -46,35 +52,18 @@ function ListingsInner() {
     } catch {
       setListings([]);
     }
-  }, [token]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function fetchListings() {
-      if (!token) return;
-
-      const query = filter ? `?state=${filter}` : '';
-
-      try {
-        const response = await apiFetch(`/seller/listings${query}`, { token });
-        if (active) setListings(response.data || []);
-      } catch {
-        if (active) setListings([]);
-      }
-    }
-
-    fetchListings();
-
-    return () => { active = false; };
   }, [token, filter]);
+
+  // Approving a listing, rejecting it, or asking for changes all happen in the
+  // admin panel, and this is the page a seller waits on to find out.
+  useLiveRefresh(load, { immediate: true, enabled: Boolean(token) });
 
   const submit = async (listing) => {
     setBusy(listing.id);
     try {
       const response = await apiFetch(`/seller/listings/${listing.id}/submit`, { method: 'POST', token });
       toast.success(response.message);
-      load(filter);
+      load();
     } catch (error) {
       toast.error(error.errors?.listing?.[0] || error.message);
     } finally {
@@ -89,7 +78,7 @@ function ListingsInner() {
     try {
       const response = await apiFetch(`/seller/listings/${listing.id}`, { method: 'DELETE', token });
       toast.success(response.message);
-      load(filter);
+      load();
     } catch (error) {
       toast.error(error.errors?.listing?.[0] || error.message);
     } finally {

@@ -1,6 +1,8 @@
 'use client';
 
+import { AnimatePresence, m } from 'motion/react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { TRANSITION, chipItem } from '@/lib/motion';
 
 const LABELS = {
   category: 'Category',
@@ -25,8 +27,6 @@ export default function ActiveFilters() {
       value: key === 'in_stock' ? 'In stock' : searchParams.get(key),
     }));
 
-  if (!active.length) return null;
-
   const drop = (key) => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete(key);
@@ -35,18 +35,64 @@ export default function ActiveFilters() {
   };
 
   return (
-    <div className="active-filters mb-4">
-      {active.map(({ key, label, value }) => (
-        <button key={key} type="button" className="chip is-active" onClick={() => drop(key)}>
-          <span className="opacity-75">{label}:</span> {value}
-          <i className="bi bi-x-lg" aria-hidden="true" />
-          <span className="visually-hidden">Remove filter</span>
-        </button>
-      ))}
+    /*
+     * The row stays mounted even with nothing in it. Returning null once the
+     * last filter went meant the last chip was torn out of the DOM rather than
+     * animated out of it -- the one removal where the feedback matters most,
+     * because it is the one that changes the whole result set.
+     *
+     * It carries its own bottom margin instead of a utility class so it can
+     * give that margin back on the way out, rather than leaving a 1.5rem hole
+     * above the grid.
+     */
+    <m.div
+      className="active-filters"
+      initial={false}
+      animate={{ marginBottom: active.length ? '1.5rem' : '0rem' }}
+      transition={TRANSITION.normal}
+    >
+      {/*
+        * popLayout takes a departing chip out of the flow at once, so the
+        * chips after it slide across into the space instead of waiting for it
+        * to finish shrinking.
+        */}
+      <AnimatePresence initial={false} mode="popLayout">
+        {active.map(({ key, label, value }) => (
+          <m.button
+            key={key}
+            layout
+            type="button"
+            className="chip is-active"
+            variants={chipItem}
+            initial="hidden"
+            animate="shown"
+            exit="hidden"
+            transition={TRANSITION.fast}
+            onClick={() => drop(key)}
+          >
+            <span className="opacity-75">{label}:</span> {value}
+            <i className="bi bi-x-lg" aria-hidden="true" />
+            <span className="visually-hidden">Remove filter</span>
+          </m.button>
+        ))}
 
-      <button type="button" className="chip" onClick={() => router.push('/shop')}>
-        Clear all
-      </button>
-    </div>
+        {active.length > 0 && (
+          <m.button
+            key="clear-all"
+            layout
+            type="button"
+            className="chip"
+            variants={chipItem}
+            initial="hidden"
+            animate="shown"
+            exit="hidden"
+            transition={TRANSITION.fast}
+            onClick={() => router.push('/shop')}
+          >
+            Clear all
+          </m.button>
+        )}
+      </AnimatePresence>
+    </m.div>
   );
 }
