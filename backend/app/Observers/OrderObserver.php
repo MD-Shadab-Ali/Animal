@@ -16,11 +16,11 @@ class OrderObserver
     public function created(Order $order): void
     {
         OrderStatusHistory::create([
-            'order_id'    => $order->id,
-            'user_id'     => auth()->id(),
+            'order_id' => $order->id,
+            'user_id' => auth()->id(),
             'from_status' => null,
-            'to_status'   => $order->status,
-            'note'        => 'Order placed',
+            'to_status' => $order->status,
+            'note' => 'Order placed',
         ]);
     }
 
@@ -61,15 +61,15 @@ class OrderObserver
         $previous = (string) $order->getOriginal('status');
 
         OrderStatusHistory::create([
-            'order_id'    => $order->id,
-            'user_id'     => auth()->id(),
+            'order_id' => $order->id,
+            'user_id' => auth()->id(),
             'from_status' => $previous,
-            'to_status'   => $order->status,
+            'to_status' => $order->status,
             // Whoever moved it may have said why; for a delivery confirmed by
             // the customer that distinction matters later.
-            'note'        => $order->statusNote,
+            'note' => $order->statusNote,
             // Evidence of the actual animal at this point in the order.
-            'photo'       => $order->statusPhoto,
+            'photo' => $order->statusPhoto,
         ]);
 
         $order->statusNote = null;
@@ -79,11 +79,12 @@ class OrderObserver
         // should be left with a line still asking them to prepare an animal.
         if ($order->status === 'cancelled') {
             $this->restock($order);
+            $this->releaseAnimals($order);
 
             $order->items()
                 ->whereNot('fulfilment_status', 'cancelled')
                 ->update([
-                    'fulfilment_status'     => 'cancelled',
+                    'fulfilment_status' => 'cancelled',
                     'fulfilment_updated_at' => now(),
                 ]);
 
@@ -124,7 +125,7 @@ class OrderObserver
         $order->items()
             ->whereIn('fulfilment_status', $behind)
             ->update([
-                'fulfilment_status'     => $target,
+                'fulfilment_status' => $target,
                 'fulfilment_updated_at' => now(),
             ]);
     }
@@ -149,6 +150,33 @@ class OrderObserver
             ->each(fn (Seller $seller) => $seller->user?->notify(
                 new SellerOrderCancelledNotification($order, $lines->where('seller_id', $seller->id))
             ));
+    }
+
+    /**
+     * Put any animal set aside for this order back in the pen.
+     *
+     * Marking one sold at the Preparing step is what stops two buyers being
+     * promised the same goat. If the order then falls over, that has to be
+     * undone -- otherwise the animal is sold to nobody, invisible to every
+     * buyer's selector and to staff picking for the next order.
+     *
+     * The line stops pointing at it too: a cancelled order telling its buyer
+     * an animal is still set aside for them would be untrue.
+     */
+    private function releaseAnimals(Order $order): void
+    {
+        $order->loadMissing('items.goatWeight');
+
+        foreach ($order->items as $item) {
+            $animal = $item->goatWeight;
+
+            if (! $animal) {
+                continue;
+            }
+
+            $animal->forceFill(['status' => 'available', 'sold_at' => null])->save();
+            $item->forceFill(['goat_weight_id' => null])->save();
+        }
     }
 
     private function restock(Order $order): void

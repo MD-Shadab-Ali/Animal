@@ -2,37 +2,39 @@
 
 namespace App\Filament\Resources\Orders\Tables;
 
+use App\Models\GoatWeight;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Setting;
 use App\Services\PaymentService;
-use Filament\Actions\Action;
 use Closure;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 
 class OrdersTable
 {
-
     /**
      * The scale question, shared by the two places that can ask it.
      *
@@ -64,8 +66,8 @@ class OrdersTable
         foreach ($readings as $itemId => $kg) {
             $record->items()->whereKey($itemId)->update([
                 'delivered_weight_kg' => $kg,
-                'weighed_at'          => now(),
-                'weighed_by'          => auth()->id(),
+                'weighed_at' => now(),
+                'weighed_by' => auth()->id(),
             ]);
         }
 
@@ -77,7 +79,7 @@ class OrdersTable
         $record->refresh();
 
         $symbol = Setting::currencySymbol();
-        $owed   = round((float) $record->total - (float) $record->paid_amount, 2);
+        $owed = round((float) $record->total - (float) $record->paid_amount, 2);
 
         Notification::make()
             ->title(abs($adjustment) < 0.01
@@ -94,6 +96,220 @@ class OrdersTable
             ->send();
 
         return $adjustment;
+    }
+
+    /**
+     * Lines that can be filled from a pen of real animals.
+     *
+     * A listing keeping no individual animals, or one whose animals are all
+     * sold, simply is not offered here -- the order carries on being prepared
+     * the way it always was.
+     */
+    private static function poolableItems(Order $record)
+    {
+        return $record->items->filter(
+            fn (OrderItem $item) => $item->goat && $item->goat->hasWeightPool()
+        )->values();
+    }
+
+    /**
+     * Picking which goat actually walks out of the pen.
+     *
+     * The nearest animal to what the buyer asked for is chosen for staff, and
+     * the rest are listed either side of it so a heavier or lighter one can be
+     * taken instead -- the goat nearest on paper is not always the one you
+     * want to send. Nothing here touches the price: `weight_kg` remains what
+     * the buyer paid for, and the difference is settled at the delivery
+     * weigh-in, which is the one place that moves money.
+     */
+    /**
+     * Tie each line to the animal staff chose, and take those animals off the
+     * shelf.
+     *
+     * Deliberately silent about money: `weight_kg` stays what the buyer paid
+     * for, and a heavier or lighter animal is settled at the delivery weigh-in.
+     * Two places moving the price would be two places to get it wrong.
+     */
+    /**
+     * The picture of whichever animal is going out, if one has been taken.
+     *
+     * Referenced rather than copied: the animal's own record is where that
+     * photograph belongs, and two copies would drift apart the moment somebody
+     * replaced one of them.
+     */
+    /**
+     * The animals picked in the form right now, in line order.
+     *
+     * Read from the form rather than the order because this runs while staff
+     * are still choosing -- nothing has been assigned yet, so the order still
+     * names whatever it named before the modal opened.
+     */
+    private static function pickedAnimals(mixed $animals): Collection
+    {
+        $ids = collect(is_array($animals) ? $animals : [])
+            ->pluck('animal_id')
+            ->filter()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        $found = GoatWeight::whereIn('id', $ids)->get()->keyBy('id');
+
+        // Back into line order: whereIn returns them however the database
+        // felt like, and the first line's animal is the one whose photo is
+        // used, so the order here is the answer rather than presentation.
+        return $ids->map(fn ($id) => $found->get($id))->filter()->values();
+    }
+
+    /**
+     * What the buyer will see, or why they will see nothing.
+     *
+     * Deliberately mirrors assignedAnimalPhoto(): first line first, first
+     * photograph found wins. If the two ever disagree the preview becomes a
+     * lie, which is worse than no preview.
+     */
+    private static function animalPhotoPreview(mixed $animals): HtmlString
+    {
+        $picked = self::pickedAnimals($animals);
+        $withPhoto = $picked->first(fn (GoatWeight $animal) => filled($animal->image));
+
+        $note = fn (string $text) => new HtmlString(
+            '<p style="margin:0;font-size:.875rem;opacity:.7">'.e($text).'</p>'
+        );
+
+        if ($picked->isEmpty()) {
+            return $note('Choose the animal below and its photograph appears here.');
+        }
+
+        if (! $withPhoto) {
+            return $note($picked->first()->label().' has no photograph on file. '
+                .'Upload one below, or add it to the animal so it is there next time.');
+        }
+
+        return new HtmlString(sprintf(
+            '<div style="display:flex;align-items:center;gap:.75rem">'
+                .'<img src="%s" alt="%s" style="width:5rem;height:5rem;object-fit:cover;'
+                .'border-radius:.5rem;border:1px solid rgba(128,128,128,.3)">'
+                .'<div><div style="font-weight:600">%s</div>'
+                .'<p style="margin:0;font-size:.875rem;opacity:.7">%s</p></div></div>',
+            e($withPhoto->image_url),
+            e($withPhoto->label()),
+            e($withPhoto->label()),
+            e('This is the photograph the buyer will see.')
+        ));
+    }
+
+    private static function assignedAnimalPhoto(Order $record): ?string
+    {
+        return $record->items()
+            ->with('goatWeight')
+            ->get()
+            ->map(fn (OrderItem $item) => $item->goatWeight?->image)
+            ->filter()
+            ->first();
+    }
+
+    private static function assignAnimals(Order $record, array $rows): void
+    {
+        foreach ($rows as $row) {
+            $item = $record->items->firstWhere('id', $row['item_id'] ?? null);
+
+            if (! $item) {
+                continue;
+            }
+
+            $animal = $row['animal_id'] ? GoatWeight::find($row['animal_id']) : null;
+
+            // Only ever an animal belonging to the goat on this line: a stale
+            // form or a hand-edited request must not attach somebody else's.
+            if ($animal && $animal->goat_id !== $item->goat_id) {
+                continue;
+            }
+
+            $item->assignAnimal($animal);
+        }
+    }
+
+    private static function animalSchema(): array
+    {
+        return [
+            Repeater::make('animals')
+                ->label('Which animal is going out')
+                ->addable(false)
+                ->deletable(false)
+                ->reorderable(false)
+                ->visible(fn (Get $get, Order $record): bool => $get('status') === 'processing'
+                    && self::poolableItems($record)->isNotEmpty())
+                ->default(fn (Order $record): array => self::poolableItems($record)
+                    ->map(fn (OrderItem $item) => [
+                        'item_id' => $item->id,
+                        'summary' => $item->goat_name.' — ordered at '.$item->weight_kg.' kg',
+                        // Pre-picked, so the common case is one glance and Submit.
+                        // An animal already assigned stays assigned rather than
+                        // being silently swapped for whatever is nearest now.
+                        'animal_id' => $item->goat_weight_id
+                            ?: $item->goat->nearestWeight((float) $item->weight_kg)?->id,
+                    ])
+                    ->all())
+                ->schema([
+                    Hidden::make('item_id'),
+                    Hidden::make('summary'),
+
+                    // Named apart from the field it reads. A Placeholder whose
+                    // content asks for its own name calls itself, and PHP dies
+                    // somewhere past a million frames.
+                    Placeholder::make('ordered_line')
+                        ->label('Goat')
+                        ->content(fn (Get $get): string => (string) $get('summary')),
+
+                    Select::make('animal_id')
+                        ->label('Animal from the farm')
+                        ->native(false)
+                        ->options(function (Get $get): array {
+                            $item = OrderItem::with('goat')->find($get('item_id'));
+
+                            if (! $item?->goat) {
+                                return [];
+                            }
+
+                            $ordered = (float) $item->weight_kg;
+
+                            // Whatever is already on this line stays choosable
+                            // even though it is no longer available, or the
+                            // form would blank out its own default.
+                            $pool = $item->goat->availableWeights();
+
+                            if ($item->goatWeight && ! $pool->contains('id', $item->goat_weight_id)) {
+                                $pool = $pool->push($item->goatWeight);
+                            }
+
+                            return $pool
+                                ->sortBy(fn (GoatWeight $animal) => abs((float) $animal->weight_kg - $ordered))
+                                ->mapWithKeys(function (GoatWeight $animal) use ($ordered) {
+                                    $kg = (float) $animal->weight_kg;
+                                    $gap = round($kg - $ordered, 2);
+
+                                    $how = match (true) {
+                                        abs($gap) < 0.005 => 'exact match',
+                                        $gap > 0 => '+'.abs($gap).' kg heavier',
+                                        default => abs($gap).' kg lighter',
+                                    };
+
+                                    return [$animal->id => trim(($animal->tag ? $animal->tag.' · ' : '')
+                                        .$kg.' kg · '.$how)];
+                                })
+                                ->all();
+                        })
+                        // The preview above reads this, so a change to it has
+                        // to reach the server or the picture would go on
+                        // showing the animal that was swapped out.
+                        ->live()
+                        ->helperText('Nearest to what the buyer ordered is chosen already. '
+                            .'The list runs outwards from it, closest first.'),
+                ]),
+        ];
     }
 
     private static function weightSchema(): array
@@ -124,10 +340,10 @@ class OrdersTable
                 ->reorderable(false)
                 ->default(fn (Order $record): array => $record->weighedItems()
                     ->map(fn (OrderItem $item) => [
-                        'item_id'   => $item->id,
+                        'item_id' => $item->id,
                         'goat_name' => $item->goat_name,
-                        'ordered'   => (float) $item->weight_kg,
-                        'kg'        => null,
+                        'ordered' => (float) $item->weight_kg,
+                        'kg' => null,
                     ])
                     ->all())
                 ->schema([
@@ -149,9 +365,9 @@ class OrdersTable
                         ->suffix('kg')
                         ->rules([
                             fn (Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
-                                $ordered   = (float) $get('ordered');
+                                $ordered = (float) $get('ordered');
                                 $direction = $get('../../weight_direction');
-                                $actual    = (float) $value;
+                                $actual = (float) $value;
 
                                 if ($direction === 'increased' && $actual <= $ordered) {
                                     $fail('You chose increased, so this has to be more than '.$ordered.' kg.');
@@ -210,9 +426,9 @@ class OrdersTable
                     ->badge()
                     ->color('gray')
                     ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'full'    => 'Paid up front',
+                        'full' => 'Paid up front',
                         'advance' => 'Advance',
-                        default   => 'On delivery',
+                        default => 'On delivery',
                     })
                     ->toggleable(),
 
@@ -225,7 +441,7 @@ class OrdersTable
                     ->color('danger')
                     ->placeholder('')
                     ->state(fn (Order $record) => $record->overpaid_amount > 0
-                        ? \App\Models\Setting::currencySymbol()
+                        ? Setting::currencySymbol()
                             .number_format($record->overpaid_amount, 2)
                         : null)
                     ->tooltip('Weighed lighter than ordered — this is refundable'),
@@ -233,10 +449,10 @@ class OrdersTable
                 TextColumn::make('payment_status')
                     ->badge()
                     ->colors([
-                        'danger'  => 'unpaid',
+                        'danger' => 'unpaid',
                         'warning' => 'partially_paid',
                         'success' => 'paid',
-                        'gray'    => 'refunded',
+                        'gray' => 'refunded',
                     ]),
 
                 TextColumn::make('status')
@@ -270,10 +486,10 @@ class OrdersTable
 
                 SelectFilter::make('payment_status')
                     ->options([
-                        'unpaid'         => 'Unpaid',
+                        'unpaid' => 'Unpaid',
                         'partially_paid' => 'Partially paid',
-                        'paid'           => 'Paid',
-                        'refunded'       => 'Refunded',
+                        'paid' => 'Paid',
+                        'refunded' => 'Refunded',
                     ]),
 
                 SelectFilter::make('delivery_zone_id')
@@ -367,15 +583,42 @@ class OrdersTable
                         // by weight it may not even be the animal they are
                         // getting. The other steps say where the order is, not
                         // what the animal looks like.
+                        /*
+                         * The photograph that is going to be used, shown.
+                         *
+                         * Staff were being handed an empty dropzone and told in
+                         * words that a photo they could not see would be used
+                         * instead. Showing it is the difference between trusting
+                         * the sentence and checking the animal.
+                         *
+                         * Named apart from every field it reads: a Placeholder
+                         * whose content asks for its own name calls itself.
+                         */
+                        Placeholder::make('animal_photo')
+                            ->label('Photo of the animal')
+                            ->visible(fn (Get $get, Order $record): bool => $get('status') === 'processing'
+                                && self::poolableItems($record)->isNotEmpty())
+                            ->content(fn (Get $get): HtmlString => self::animalPhotoPreview($get('animals'))),
+
                         FileUpload::make('photo')
-                            ->label('Photo of the animal (optional)')
+                            // Reads as the override it is once the picture
+                            // above is on screen, and as the only photo going
+                            // when this listing keeps no animals to pull one from.
+                            ->label(fn (Order $record): string => self::poolableItems($record)->isNotEmpty()
+                                ? 'Use a different photo (optional)'
+                                : 'Photo of the animal (optional)')
                             ->image()
                             ->imageEditor()
                             ->directory('order-status')
                             ->maxSize(4096)
                             ->visible(fn (callable $get): bool => $get('status') === 'processing')
-                            ->helperText('Shown to the buyer against this step, so they can see '
-                                .'the animal they are actually getting.'),
+                            ->helperText(fn (Order $record): ?string => self::poolableItems($record)->isNotEmpty()
+                                ? 'Anything uploaded here is shown to the buyer instead of the one above.'
+                                : null),
+
+                        // Preparing is when someone walks out to the pen, so it
+                        // is when the animal gets chosen.
+                        ...self::animalSchema(),
                     ])
                     ->action(function (Order $record, array $data): void {
                         // Recorded before the status moves, so a line is never
@@ -394,6 +637,13 @@ class OrdersTable
                             }
                         }
 
+                        // Which goat is actually going out. Done before the
+                        // status moves so the buyer's order already names the
+                        // animal by the time Preparing shows on their timeline.
+                        if (($data['status'] ?? null) === 'processing') {
+                            self::assignAnimals($record, $data['animals'] ?? []);
+                        }
+
                         // Handed to the observer, which writes them onto the
                         // status-history row this update is about to create.
                         $record->statusNote = $data['note'] ?: null;
@@ -401,8 +651,14 @@ class OrdersTable
                         // Guarded as well as hidden: a photo picked before the
                         // status was changed away from Preparing must not ride
                         // along on a step it does not belong to.
+                        /*
+                         * The animal already has its picture taken, so asking
+                         * staff to photograph it again at Preparing was asking
+                         * twice for the same thing. An upload here still wins,
+                         * for when a better shot is wanted.
+                         */
                         $record->statusPhoto = $data['status'] === 'processing'
-                            ? ($data['photo'] ?? null) ?: null
+                            ? (($data['photo'] ?? null) ?: self::assignedAnimalPhoto($record))
                             : null;
 
                         $record->update([
@@ -462,8 +718,8 @@ class OrdersTable
                     // direct write here would be silently undone by the next sync.
                     ->action(function (Order $record, array $data): void {
                         $payment = app(PaymentService::class)->record($record, [
-                            'amount'                => $data['amount'],
-                            'method'                => $record->payment_method,
+                            'amount' => $data['amount'],
+                            'method' => $record->payment_method,
                             'transaction_reference' => $data['transaction_id'] ?: null,
                         ], auth()->user());
 
@@ -496,9 +752,9 @@ class OrdersTable
                     ])
                     ->action(function (Order $record, array $data): void {
                         $record->update([
-                            'status'     => 'cancelled',
-                            'admin_note' => trim($record->admin_note."
-".'Cancelled by staff: '.$data['reason']),
+                            'status' => 'cancelled',
+                            'admin_note' => trim($record->admin_note.'
+'.'Cancelled by staff: '.$data['reason']),
                         ]);
 
                         Notification::make()

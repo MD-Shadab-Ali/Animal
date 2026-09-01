@@ -48,13 +48,13 @@ class GoatController extends Controller
         });
 
         match ($request->string('sort')->toString()) {
-            'price_asc'  => $query->orderBy('price'),
+            'price_asc' => $query->orderBy('price'),
             'price_desc' => $query->orderByDesc('price'),
             'weight_asc' => $query->orderBy('weight_kg'),
-            'weight_desc'=> $query->orderByDesc('weight_kg'),
-            'popular'    => $query->orderByDesc('views'),
-            'latest'     => $query->latest(),
-            default      => $query->orderBy('sort_order')->latest(),
+            'weight_desc' => $query->orderByDesc('weight_kg'),
+            'popular' => $query->orderByDesc('views'),
+            'latest' => $query->latest(),
+            default => $query->orderBy('sort_order')->latest(),
         };
 
         return GoatResource::collection($query->paginate($perPage)->withQueryString());
@@ -63,7 +63,7 @@ class GoatController extends Controller
     public function show(string $slug): GoatResource
     {
         $goat = Goat::query()
-            ->with(['category', 'seller', 'images', 'approvedReviews.user'])
+            ->with(['category', 'seller', 'images', 'approvedReviews.user', 'weights'])
             ->published()
             ->where('slug', $slug)
             ->firstOrFail();
@@ -98,13 +98,13 @@ class GoatController extends Controller
             ->orderBy('breed')
             ->pluck('breed');
 
-        $priceRange  = Goat::published()->selectRaw('MIN(price) as min, MAX(price) as max')->first();
+        $priceRange = Goat::published()->selectRaw('MIN(price) as min, MAX(price) as max')->first();
         $weightRange = Goat::published()->selectRaw('MIN(weight_kg) as min, MAX(weight_kg) as max')->first();
 
         return response()->json([
             'data' => [
                 'breeds' => $breeds,
-                'price'  => [
+                'price' => [
                     'min' => (float) ($priceRange->min ?? 0),
                     'max' => (float) ($priceRange->max ?? 0),
                 ],
@@ -113,7 +113,7 @@ class GoatController extends Controller
                     'max' => (float) ($weightRange->max ?? 0),
                 ],
                 'genders' => ['male', 'female'],
-                'sorts'   => [
+                'sorts' => [
                     ['value' => 'default',     'label' => 'Recommended'],
                     ['value' => 'latest',      'label' => 'Newest first'],
                     ['value' => 'price_asc',   'label' => 'Price: low to high'],

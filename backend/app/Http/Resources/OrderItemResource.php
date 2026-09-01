@@ -21,14 +21,33 @@ class OrderItemResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'         => $this->id,
-            'goat_id'    => $this->goat_id,
-            'name'       => $this->goat_name,
-            'sku'        => $this->goat_sku,
-            'thumbnail'  => $this->thumbnail_url,
-            'slug'       => $this->whenLoaded('goat', fn () => $this->goat?->slug),
+            'id' => $this->id,
+            'goat_id' => $this->goat_id,
+            'name' => $this->goat_name,
+            'sku' => $this->goat_sku,
+            'thumbnail' => $this->thumbnail_url,
+            'slug' => $this->whenLoaded('goat', fn () => $this->goat?->slug),
             // What was agreed at the time, not what the listing says now.
-            'weight_kg'    => $this->weight_kg !== null ? (float) $this->weight_kg : null,
+            'weight_kg' => $this->weight_kg !== null ? (float) $this->weight_kg : null,
+
+            /*
+             * The particular goat set aside for this line, once staff have
+             * picked one at the Preparing step. Null until then, and on every
+             * line whose listing keeps no individual animals.
+             *
+             * Its weight can differ from weight_kg above -- that is what the
+             * buyer asked for, this is the animal they are getting -- and the
+             * difference is settled on the scale at delivery.
+             */
+            'animal' => $this->whenLoaded('goatWeight', fn () => $this->goatWeight ? [
+                'tag' => $this->goatWeight->tag,
+                'weight_kg' => (float) $this->goatWeight->weight_kg,
+                'image' => $this->goatWeight->image_url,
+                // The same code as the tag on the pen, so a buyer can hold the
+                // two side by side and see they match.
+                'qr' => route('api.v1.animals.qr', ['token' => $this->goatWeight->token]),
+                'url' => $this->goatWeight->publicUrl(),
+            ] : null),
             'price_per_kg' => $this->price_per_kg !== null ? (float) $this->price_per_kg : null,
             // What the scale said on arrival, and which way it moved. A live
             // animal loses gut fill and water on the road, so this rarely
@@ -40,15 +59,15 @@ class OrderItemResource extends JsonResource
             // Signed: negative when the goat came in lighter and money came
             // off. The agreed line total stays above it, untouched.
             'price_adjustment' => (float) $this->price_adjustment,
-            'charged_total'    => $this->charged_line_total,
+            'charged_total' => $this->charged_line_total,
             'unit_price' => (float) $this->unit_price,
-            'quantity'   => $this->quantity,
+            'quantity' => $this->quantity,
             'line_total' => (float) $this->line_total,
 
             // Whoever supplied this goat -- a seller or the farm -- moves this
             // along, and the buyer should be able to watch it happen.
             'supplied_by' => $this->seller_name ?: Setting::get('site_name'),
-            'fulfilment'  => $this->fulfilmentBlock(),
+            'fulfilment' => $this->fulfilmentBlock(),
         ];
     }
 
@@ -66,16 +85,16 @@ class OrderItemResource extends JsonResource
     private function fulfilmentBlock(): array
     {
         $status = $this->fulfilment_status;
-        $label  = $this->fulfilment_label;
+        $label = $this->fulfilment_label;
 
         if ($this->orderStatus === 'delivered' && $status !== 'cancelled') {
             $status = 'delivered';
-            $label  = 'Delivered';
+            $label = 'Delivered';
         }
 
         return [
-            'status'     => $status,
-            'label'      => $label,
+            'status' => $status,
+            'label' => $label,
             'updated_at' => $this->fulfilment_updated_at?->toIso8601String(),
         ];
     }

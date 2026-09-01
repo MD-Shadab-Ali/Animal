@@ -28,19 +28,19 @@ class Goat extends Model
     protected function casts(): array
     {
         return [
-            'specs'         => 'array',
-            'submitted_at'  => 'datetime',
-            'approved_at'   => 'datetime',
-            'price'         => 'decimal:2',
-            'sale_price'    => 'decimal:2',
-            'weight_kg'     => 'decimal:2',
-            'price_per_kg'  => 'decimal:2',
+            'specs' => 'array',
+            'submitted_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'price' => 'decimal:2',
+            'sale_price' => 'decimal:2',
+            'weight_kg' => 'decimal:2',
+            'price_per_kg' => 'decimal:2',
             'min_weight_kg' => 'decimal:2',
             'max_weight_kg' => 'decimal:2',
             'weight_step_kg' => 'decimal:2',
-            'is_featured'   => 'boolean',
+            'is_featured' => 'boolean',
             'is_vaccinated' => 'boolean',
-            'track_stock'   => 'boolean',
+            'track_stock' => 'boolean',
         ];
     }
 
@@ -185,6 +185,97 @@ class Goat extends Model
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | The actual animals
+    |--------------------------------------------------------------------------
+    |
+    | A listing may name the real goats behind it, each already weighed. They
+    | are recorded and managed in the admin panel, but nothing on the storefront
+    | reads them at present -- the buyer's selector describes a range, a step
+    | and arithmetic, as it always did. Kept because the animals are real and
+    | the data has been entered: this is what a selector would read if one were
+    | pointed at them again.
+    |
+    */
+
+    public function weights(): HasMany
+    {
+        return $this->hasMany(GoatWeight::class);
+    }
+
+    /** The unsold animals, lightest first. */
+    public function availableWeights()
+    {
+        return $this->weights
+            ->where('status', 'available')
+            ->sortBy(fn (GoatWeight $weight) => (float) $weight->weight_kg)
+            ->values();
+    }
+
+    public function hasWeightPool(): bool
+    {
+        return $this->availableWeights()->isNotEmpty();
+    }
+
+    /**
+     * What is actually standing in the pen, as ranges.
+     *
+     * The listing carries one age and one weight because it used to be one
+     * animal. It is not: behind this row are real goats, and the only honest
+     * thing a listing can say about their age is the span it covers. Ages come
+     * back null when nobody has recorded any -- an empty range is not the same
+     * claim as a range of nothing, and the page says so rather than printing a
+     * dash where a fact should be.
+     *
+     * @return array{count: int, min_weight_kg: float, max_weight_kg: float, min_age_months: int|null, max_age_months: int|null}|null
+     */
+    public function poolSummary(): ?array
+    {
+        $pool = $this->availableWeights();
+
+        if ($pool->isEmpty()) {
+            return null;
+        }
+
+        $weights = $pool->map(fn (GoatWeight $animal) => (float) $animal->weight_kg);
+        $ages = $pool->pluck('age_months')->filter(fn ($age) => $age !== null);
+
+        return [
+            'count' => $pool->count(),
+            'min_weight_kg' => $weights->min(),
+            'max_weight_kg' => $weights->max(),
+            'min_age_months' => $ages->isEmpty() ? null : (int) $ages->min(),
+            'max_age_months' => $ages->isEmpty() ? null : (int) $ages->max(),
+        ];
+    }
+
+    /**
+     * The animal closest to what the buyer asked for.
+     *
+     * Ties go to the lighter one -- at the same distance either way, the
+     * cheaper animal is the one to hand over unasked.
+     */
+    public function nearestWeight(?float $kg): ?GoatWeight
+    {
+        $pool = $this->availableWeights();
+
+        if ($pool->isEmpty()) {
+            return null;
+        }
+
+        if ($kg === null) {
+            return $pool->first();
+        }
+
+        return $pool
+            ->sortBy(fn (GoatWeight $weight) => [
+                abs((float) $weight->weight_kg - $kg),
+                (float) $weight->weight_kg,
+            ])
+            ->first();
+    }
+
     /** True when the buyer has a weight to choose rather than just the one. */
     public function getIsWeightPricedAttribute(): bool
     {
@@ -218,7 +309,7 @@ class Goat extends Model
     public function getLightestWeightAttribute(): float
     {
         $anchor = $this->anchor_weight;
-        $floor  = (float) ($this->min_weight_kg ?: $this->weight_kg);
+        $floor = (float) ($this->min_weight_kg ?: $this->weight_kg);
 
         if ($floor >= $anchor) {
             return $anchor;
@@ -233,7 +324,7 @@ class Goat extends Model
     /** The heaviest weight actually offered, snapped onto the step grid. */
     public function getHeaviestWeightAttribute(): float
     {
-        $anchor  = $this->anchor_weight;
+        $anchor = $this->anchor_weight;
         $ceiling = (float) ($this->max_weight_kg ?: $this->weight_kg);
 
         if ($ceiling <= $anchor) {
@@ -309,7 +400,7 @@ class Goat extends Model
         }
 
         $anchor = $this->anchor_weight;
-        $step   = $this->weight_step;
+        $step = $this->weight_step;
 
         $kg = $anchor + round(((float) $kg - $anchor) / $step) * $step;
 
@@ -324,7 +415,7 @@ class Goat extends Model
         }
 
         $step = $this->weight_step;
-        $max  = $this->heaviest_weight;
+        $max = $this->heaviest_weight;
 
         $options = [];
 
@@ -334,7 +425,7 @@ class Goat extends Model
 
             $options[] = [
                 'weight_kg' => $rounded,
-                'price'     => $this->priceForWeight($rounded),
+                'price' => $this->priceForWeight($rounded),
             ];
         }
 

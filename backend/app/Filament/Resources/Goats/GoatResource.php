@@ -6,15 +6,17 @@ use App\Filament\Resources\Goats\Pages\CreateGoat;
 use App\Filament\Resources\Goats\Pages\EditGoat;
 use App\Filament\Resources\Goats\Pages\ListGoats;
 use App\Filament\Resources\Goats\RelationManagers\ImagesRelationManager;
+use App\Filament\Resources\Goats\RelationManagers\WeightsRelationManager;
 use App\Filament\Resources\Goats\Schemas\GoatForm;
 use App\Filament\Resources\Goats\Tables\GoatsTable;
 use App\Models\Goat;
-use BackedEnum;
 use App\Support\RestrictsAccessByRole;
+use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use UnitEnum;
 
 class GoatResource extends Resource
@@ -47,13 +49,14 @@ class GoatResource extends Resource
     {
         return [
             ImagesRelationManager::class,
+            WeightsRelationManager::class,
         ];
     }
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->withoutGlobalScopes([
-            \Illuminate\Database\Eloquent\SoftDeletingScope::class,
+            SoftDeletingScope::class,
         ]);
     }
 
@@ -80,9 +83,9 @@ class GoatResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => ListGoats::route('/'),
+            'index' => ListGoats::route('/'),
             'create' => CreateGoat::route('/create'),
-            'edit'   => EditGoat::route('/{record}/edit'),
+            'edit' => EditGoat::route('/{record}/edit'),
         ];
     }
 }

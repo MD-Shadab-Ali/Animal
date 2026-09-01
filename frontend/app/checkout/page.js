@@ -3,7 +3,7 @@
 import { AnimatePresence, m } from 'motion/react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import CartSummary from '@/components/cart/CartSummary';
 import CheckoutFields from '@/components/checkout/CheckoutFields';
@@ -46,19 +46,58 @@ function CheckoutInner() {
     save_address: true,
   });
 
+  /*
+   * `user` is a different object every time it is fetched, and AuthContext
+   * refetches it whenever this tab regains focus. Depending on it directly
+   * re-ran the bootstrap below -- and with it the address prefill -- while the
+   * buyer was part-way through the form: switch to another window, come back,
+   * and everything typed since the page loaded had been quietly replaced by the
+   * saved address. Held in a ref, the bootstrap can depend on the token alone.
+   */
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    userRef.current = user;
+  });
+
+  // Prefill is a convenience, and a convenience never overwrites a person's
+  // own typing. Both of these fire once and then stop.
+  const addressApplied = useRef(false);
+  const identityFilled = useRef(false);
+
   // Declared before the effect below, which calls it once addresses load.
   const applyAddress = useCallback((address) => {
     setForm((current) => ({
       ...current,
-      customer_name: address.full_name,
-      customer_phone: address.phone,
-      address_line: address.address_line,
-      area: address.area || '',
-      city: address.city,
-      postal_code: address.postal_code || '',
+      // Filled, never replaced. A saved address with no area must not blank an
+      // area the buyer has already typed -- which is exactly what it did, and
+      // the server then refused the order for a missing area the buyer could
+      // see themselves having entered.
+      customer_name: current.customer_name || address.full_name || '',
+      customer_phone: current.customer_phone || address.phone || '',
+      address_line: current.address_line || address.address_line || '',
+      area: current.area || address.area || '',
+      city: current.city || address.city || '',
+      postal_code: current.postal_code || address.postal_code || '',
       save_address: false,
     }));
   }, []);
+
+  // The account's own name and contact details, once, as soon as they are
+  // known -- they arrive after the first render, which is why this is not
+  // folded into the fetch below.
+  useEffect(() => {
+    if (!user || identityFilled.current) return;
+
+    identityFilled.current = true;
+
+    setForm((current) => ({
+      ...current,
+      customer_name: current.customer_name || user.name || '',
+      customer_phone: current.customer_phone || user.phone || '',
+      customer_email: current.customer_email || user.email || '',
+    }));
+  }, [user]);
 
   // Pull the delivery zones and payment methods the admin has enabled.
   useEffect(() => {
@@ -74,9 +113,9 @@ function CheckoutInner() {
 
         setForm((current) => ({
           ...current,
-          customer_name: current.customer_name || user?.name || '',
-          customer_phone: current.customer_phone || user?.phone || '',
-          customer_email: current.customer_email || user?.email || '',
+          customer_name: current.customer_name || userRef.current?.name || '',
+          customer_phone: current.customer_phone || userRef.current?.phone || '',
+          customer_email: current.customer_email || userRef.current?.email || '',
           delivery_zone_id: current.delivery_zone_id || data.delivery_zones?.[0]?.id || '',
           // Default to the first method that can actually place an order —
           // cash on delivery sits at the top of the list but only settles it.
@@ -93,13 +132,16 @@ function CheckoutInner() {
         const saved = addressResponse.data || [];
         const preferred = saved.find((address) => address.is_default) || saved[0];
 
-        if (preferred) {
+        if (preferred && !addressApplied.current) {
+          addressApplied.current = true;
           applyAddress(preferred);
           setPrefilled(true);
         }
       })
       .catch(() => toast.error('Could not load checkout options.'));
-  }, [token, user, applyAddress]);
+    // Deliberately not `user`: see the ref above. This is a one-time bootstrap
+    // for a session, and re-running it mid-form is what broke the address.
+  }, [token, applyAddress]);
 
   const update = (key) => (event) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;

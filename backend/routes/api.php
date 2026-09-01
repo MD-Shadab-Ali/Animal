@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AddressController;
+use App\Http\Controllers\Api\V1\AnimalController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CartController;
 use App\Http\Controllers\Api\V1\CategoryController;
@@ -11,8 +12,8 @@ use App\Http\Controllers\Api\V1\GatewayPaymentController;
 use App\Http\Controllers\Api\V1\GoatController;
 use App\Http\Controllers\Api\V1\HomeController;
 use App\Http\Controllers\Api\V1\OrderController;
-use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PasswordResetController;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReviewController;
 use App\Http\Controllers\Api\V1\SellerAccountController;
 use App\Http\Controllers\Api\V1\SellerDirectoryController;
@@ -54,6 +55,24 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('subscribe', [ContactController::class, 'subscribe'])->name('subscribe');
         Route::post('goats/{slug}/inquiry', [ContactController::class, 'inquiry'])->name('goats.inquiry');
     });
+
+    /*
+    |--------------------------------------------------------------------------
+    | A scanned ear tag
+    |--------------------------------------------------------------------------
+    |
+    | Open on purpose: whoever is holding the goat should be able to check it,
+    | and at the gate that is the buyer, not staff. The token in the URL is
+    | random, so this cannot be used to read the pen by counting upwards.
+    |
+    */
+    Route::get('animals/{token}', [AnimalController::class, 'show'])
+        ->where('token', '[A-Za-z0-9]{16,64}')
+        ->name('animals.show');
+
+    Route::get('animals/{token}/qr', [AnimalController::class, 'qr'])
+        ->where('token', '[A-Za-z0-9]{16,64}')
+        ->name('animals.qr');
 
     /*
     |--------------------------------------------------------------------------
@@ -216,5 +235,3 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         });
     });
 });
-
-

@@ -36,17 +36,46 @@ export default async function GoatPage({ params }) {
 
   const related = (await apiFetchOrNull(`/goats/${slug}/related`, { revalidate: 60 }))?.data || [];
 
+  /*
+   * A listing is not an animal.
+   *
+   * Behind this page are real goats -- fifteen of them, anywhere from 20 to
+   * 60 kg -- and no single age, tooth count or colour is true of all of them.
+   * The listing columns holding those values were never entered carelessly;
+   * the fields simply had no correct answer to give. Where the farm has told
+   * us which animals it actually holds, this page says what is true of the
+   * group and leaves the individual readings to the animal's own page, which
+   * is a tag scan away. Where it has not, the listing is still the best
+   * description there is and nothing changes.
+   */
+  const pool = goat.pool || null;
+
+  const ageRange = pool && pool.min_age_months !== null
+    ? (pool.min_age_months === pool.max_age_months
+      ? formatAge(pool.min_age_months)
+      : `${formatAge(pool.min_age_months)} – ${formatAge(pool.max_age_months)}`)
+    : null;
+
   const headline = [
     ['Breed', goat.breed],
-    ['Weight', goat.weight_kg ? `${goat.weight_kg} kg` : null],
-    ['Age', formatAge(goat.age_months)],
+    // The weight tile goes when there is a pool: the buyer chooses a weight
+    // just below, and a fixed figure beside a slider offering a range only
+    // ever read as a contradiction.
+    ['Weight', pool ? null : (goat.weight_kg ? `${goat.weight_kg} kg` : null)],
+    ['Age', pool ? ageRange : formatAge(goat.age_months)],
     ['Gender', goat.gender ? goat.gender[0].toUpperCase() + goat.gender.slice(1) : null],
+    ['On the farm', pool ? `${pool.count} ${pool.count === 1 ? 'goat' : 'goats'}` : null],
   ].filter(([, value]) => value);
 
   const specs = [
-    ['Colour', goat.color],
-    ['Permanent teeth', goat.teeth != null ? String(goat.teeth) : null],
-    ['Health', goat.health_status],
+    // Colour, dentition and a health reading belong to one goat. With a pool
+    // behind this listing they are on each animal instead; the buyer sees the
+    // ones for their own goat once it is set aside, or by scanning its tag.
+    ['Colour', pool ? null : goat.color],
+    ['Permanent teeth', !pool && goat.teeth != null ? String(goat.teeth) : null],
+    ['Health', pool ? null : goat.health_status],
+    // Kept either way: a vaccination round is done to a batch, so unlike the
+    // rest of these it is a thing the whole listing can honestly claim.
     ['Vaccinated', goat.is_vaccinated ? 'Yes' : 'No'],
     ['SKU', goat.sku],
     ...(goat.specs || []).map((spec) => [spec.label, spec.value]),

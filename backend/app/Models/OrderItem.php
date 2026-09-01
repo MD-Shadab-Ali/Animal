@@ -10,6 +10,7 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id', 'goat_id', 'seller_id', 'seller_name',
         'goat_name', 'goat_sku', 'goat_thumbnail',
+        'goat_weight_id',
         'weight_kg', 'price_per_kg',
         'delivered_weight_kg', 'weighed_at', 'weighed_by',
         'unit_price', 'quantity', 'line_total', 'price_adjustment',
@@ -20,16 +21,16 @@ class OrderItem extends Model
     protected function casts(): array
     {
         return [
-            'weight_kg'         => 'decimal:2',
+            'weight_kg' => 'decimal:2',
             'delivered_weight_kg' => 'decimal:2',
-            'weighed_at'        => 'datetime',
-            'price_per_kg'      => 'decimal:2',
-            'unit_price'        => 'decimal:2',
-            'line_total'        => 'decimal:2',
-            'price_adjustment'  => 'decimal:2',
-            'commission_rate'   => 'decimal:2',
+            'weighed_at' => 'datetime',
+            'price_per_kg' => 'decimal:2',
+            'unit_price' => 'decimal:2',
+            'line_total' => 'decimal:2',
+            'price_adjustment' => 'decimal:2',
+            'commission_rate' => 'decimal:2',
             'commission_amount' => 'decimal:2',
-            'seller_earning'    => 'decimal:2',
+            'seller_earning' => 'decimal:2',
             'fulfilment_updated_at' => 'datetime',
         ];
     }
@@ -74,7 +75,7 @@ class OrderItem extends Model
         return match (true) {
             $delta > 0 => 'increased',
             $delta < 0 => 'decreased',
-            default    => 'same',
+            default => 'same',
         };
     }
 
@@ -108,19 +109,19 @@ class OrderItem extends Model
 
     /** What the seller of this line can set, in the order they happen. */
     public const FULFILMENT_STATUSES = [
-        'pending'     => 'Not started',
-        'preparing'   => 'Preparing the animal',
-        'ready'       => 'Ready for collection',
+        'pending' => 'Not started',
+        'preparing' => 'Preparing the animal',
+        'ready' => 'Ready for collection',
         'handed_over' => 'Handed to the courier',
-        'cancelled'   => 'Cancelled',
+        'cancelled' => 'Cancelled',
     ];
 
     public const FULFILMENT_COLORS = [
-        'pending'     => 'gray',
-        'preparing'   => 'warning',
-        'ready'       => 'info',
+        'pending' => 'gray',
+        'preparing' => 'warning',
+        'ready' => 'info',
         'handed_over' => 'success',
-        'cancelled'   => 'danger',
+        'cancelled' => 'danger',
     ];
 
     /** Forward-only: a seller advances a line, never rewinds it. */
@@ -151,6 +152,36 @@ class OrderItem extends Model
     public function goat(): BelongsTo
     {
         return $this->belongsTo(Goat::class);
+    }
+
+    /**
+     * The actual animal this line is being filled with, once staff have picked
+     * one out of the pen. Null while none has been chosen, and on every line
+     * whose listing keeps no individual animals.
+     */
+    public function goatWeight(): BelongsTo
+    {
+        return $this->belongsTo(GoatWeight::class);
+    }
+
+    /**
+     * Tie this line to a particular animal and take it off the shelf.
+     *
+     * Any animal previously assigned to this line goes back to being available
+     * first: re-running the Preparing step after a change of mind must not
+     * leave the earlier goat marked sold to nobody.
+     */
+    public function assignAnimal(?GoatWeight $animal): void
+    {
+        $previous = $this->goatWeight;
+
+        if ($previous && (! $animal || $previous->isNot($animal))) {
+            $previous->forceFill(['status' => 'available', 'sold_at' => null])->save();
+        }
+
+        $this->forceFill(['goat_weight_id' => $animal?->id])->save();
+
+        $animal?->markSold();
     }
 
     public function seller(): BelongsTo

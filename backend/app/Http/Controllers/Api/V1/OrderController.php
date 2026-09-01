@@ -10,8 +10,8 @@ use App\Models\PaymentMethod;
 use App\Services\PaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
@@ -27,7 +27,7 @@ class OrderController extends Controller
 
     public function show(Request $request, string $orderNumber): OrderResource
     {
-        $order = Order::with(['items.goat', 'deliveryZone', 'statusHistories', 'payments'])
+        $order = Order::with(['items.goat', 'items.goatWeight', 'deliveryZone', 'statusHistories', 'payments'])
             ->where('user_id', $request->user()->id)
             ->where('order_number', $orderNumber)
             ->firstOrFail();
@@ -48,15 +48,15 @@ class OrderController extends Controller
             ->firstOrFail();
 
         $data = $request->validate([
-            'method'                => ['required', 'string', 'exists:payment_methods,code'],
-            'amount'                => ['required', 'numeric', 'min:1', 'max:'.max($order->balance_due, 1)],
+            'method' => ['required', 'string', 'exists:payment_methods,code'],
+            'amount' => ['required', 'numeric', 'min:1', 'max:'.max($order->balance_due, 1)],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
-            'note'                  => ['nullable', 'string', 'max:500'],
-            'proof'                 => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'note' => ['nullable', 'string', 'max:500'],
+            'proof' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
         ], [
-            'amount.max'      => 'That is more than the outstanding balance on this order.',
-            'method.exists'   => 'That payment method is not available.',
-            'proof.max'       => 'The receipt must be 5MB or smaller.',
+            'amount.max' => 'That is more than the outstanding balance on this order.',
+            'method.exists' => 'That payment method is not available.',
+            'proof.max' => 'The receipt must be 5MB or smaller.',
         ]);
 
         if ($request->hasFile('proof')) {
@@ -67,7 +67,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Thank you. We will check it against our account and confirm shortly.',
-            'data'    => new PaymentEntryResource($payment),
+            'data' => new PaymentEntryResource($payment),
         ], 201);
     }
 
@@ -90,19 +90,19 @@ class OrderController extends Controller
         $chosen = $rails->firstWhere('code', $request->input('method'));
 
         $data = $request->validate([
-            'method'            => ['required', 'string', Rule::in($rails->pluck('code'))],
-            'refund_to_name'    => ['required', 'string', 'max:255'],
+            'method' => ['required', 'string', Rule::in($rails->pluck('code'))],
+            'refund_to_name' => ['required', 'string', 'max:255'],
             'refund_to_account' => ['required', 'string', 'max:60'],
-            'refund_to_bank'    => [
+            'refund_to_bank' => [
                 Rule::requiredIf(fn () => (bool) $chosen?->requires_bank_name),
                 'nullable', 'string', 'max:255',
             ],
-            'refund_reason'     => ['nullable', 'string', 'max:500'],
+            'refund_reason' => ['nullable', 'string', 'max:500'],
         ], [
-            'method.in'                  => 'We cannot send money back that way.',
-            'refund_to_name.required'    => 'Tell us the name on the account.',
+            'method.in' => 'We cannot send money back that way.',
+            'refund_to_name.required' => 'Tell us the name on the account.',
             'refund_to_account.required' => 'Tell us the account or wallet number to send it to.',
-            'refund_to_bank.required'    => 'Tell us which bank to send it to.',
+            'refund_to_bank.required' => 'Tell us which bank to send it to.',
         ]);
 
         // A wallet has no bank, so nothing misleading is stored against one.
@@ -112,7 +112,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Refund requested. We will send it back and let you know.',
-            'data'    => new PaymentEntryResource($refund),
+            'data' => new PaymentEntryResource($refund),
         ], 201);
     }
 
@@ -133,7 +133,7 @@ class OrderController extends Controller
         if ($order->status === 'delivered') {
             return response()->json([
                 'message' => 'Thanks — this order is already marked as delivered.',
-                'data'    => new OrderResource($order->load('items')),
+                'data' => new OrderResource($order->load(['items.goatWeight'])),
             ]);
         }
 
@@ -151,7 +151,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Thank you — enjoy your goat!',
-            'data'    => new OrderResource($order->fresh()->load('items')),
+            'data' => new OrderResource($order->fresh()->load(['items.goatWeight'])),
         ]);
     }
 
@@ -171,7 +171,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Order cancelled.',
-            'data'    => new OrderResource($order->fresh()->load('items')),
+            'data' => new OrderResource($order->fresh()->load(['items.goatWeight'])),
         ]);
     }
 }

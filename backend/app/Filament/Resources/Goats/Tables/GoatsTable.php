@@ -3,11 +3,9 @@
 namespace App\Filament\Resources\Goats\Tables;
 
 use App\Models\Goat;
+use App\Models\Setting;
 use App\Notifications\ListingReviewed;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Textarea;
-use Filament\Notifications\Notification;
-use App\Models\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -15,6 +13,8 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreBulkAction;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -56,10 +56,10 @@ class GoatsTable
                     ->label('Review')
                     ->badge()
                     ->colors([
-                        'gray'    => 'draft',
+                        'gray' => 'draft',
                         'warning' => 'pending',
                         'success' => 'approved',
-                        'danger'  => 'rejected',
+                        'danger' => 'rejected',
                     ])
                     ->sortable(),
 
@@ -99,7 +99,7 @@ class GoatsTable
                     ->badge()
                     ->color(fn ($record) => match (true) {
                         ! $record->track_stock => 'gray',
-                        $record->stock <= 0    => 'danger',
+                        $record->stock <= 0 => 'danger',
                         $record->stock <= (int) Setting::get('low_stock_threshold', 2) => 'warning',
                         default => 'success',
                     })
@@ -109,10 +109,10 @@ class GoatsTable
                 TextColumn::make('status')
                     ->badge()
                     ->colors([
-                        'gray'    => 'draft',
+                        'gray' => 'draft',
                         'success' => 'published',
                         'warning' => 'sold',
-                        'danger'  => 'archived',
+                        'danger' => 'archived',
                     ])
                     ->sortable(),
 
@@ -142,17 +142,17 @@ class GoatsTable
 
                 SelectFilter::make('status')
                     ->options([
-                        'draft'     => 'Draft',
+                        'draft' => 'Draft',
                         'published' => 'Published',
-                        'sold'      => 'Sold',
-                        'archived'  => 'Archived',
+                        'sold' => 'Sold',
+                        'archived' => 'Archived',
                     ]),
 
                 SelectFilter::make('approval_status')
                     ->label('Review status')
                     ->options([
-                        'draft'    => 'Draft',
-                        'pending'  => 'Awaiting review',
+                        'draft' => 'Draft',
+                        'pending' => 'Awaiting review',
                         'approved' => 'Approved',
                         'rejected' => 'Rejected',
                     ]),
@@ -190,11 +190,11 @@ class GoatsTable
                     ->modalDescription('The listing goes live in the shop straight away.')
                     ->action(function (Goat $record): void {
                         $record->update([
-                            'approval_status'  => 'approved',
+                            'approval_status' => 'approved',
                             'rejection_reason' => null,
-                            'approved_at'      => now(),
-                            'approved_by'      => auth()->id(),
-                            'status'           => 'published',
+                            'approved_at' => now(),
+                            'approved_by' => auth()->id(),
+                            'status' => 'published',
                         ]);
 
                         $record->seller?->user?->notify(new ListingReviewed($record->fresh()));
@@ -216,9 +216,9 @@ class GoatsTable
                     ])
                     ->action(function (Goat $record, array $data): void {
                         $record->update([
-                            'approval_status'  => 'rejected',
+                            'approval_status' => 'rejected',
                             'rejection_reason' => $data['rejection_reason'],
-                            'status'           => 'draft',
+                            'status' => 'draft',
                         ]);
 
                         $record->seller?->user?->notify(new ListingReviewed($record->fresh()));

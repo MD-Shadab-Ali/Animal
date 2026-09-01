@@ -2,13 +2,14 @@
 
 namespace App\Filament\Resources\Goats\Schemas;
 
+use App\Models\Setting;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -136,7 +137,7 @@ class GoatForm
                             ->numeric()
                             ->minValue(0)
                             ->live(onBlur: true)
-                            ->prefix(fn () => \App\Models\Setting::currencySymbol())
+                            ->prefix(fn () => Setting::currencySymbol())
                             ->helperText('For the weight on the Livestock tab. Heavier animals '
                                 .'are priced up from here.'),
 
@@ -144,7 +145,7 @@ class GoatForm
                             ->numeric()
                             ->minValue(0)
                             ->live(onBlur: true)
-                            ->prefix(fn () => \App\Models\Setting::currencySymbol())
+                            ->prefix(fn () => Setting::currencySymbol())
                             ->helperText('Leave blank for no discount. Must be lower than the price.')
                             ->lte('price'),
 
@@ -175,9 +176,9 @@ class GoatForm
                             ->columnSpanFull()
                             ->content(function (callable $get): string {
                                 $anchor = (float) $get('weight_kg');
-                                $step   = (float) ($get('weight_step_kg') ?: 1);
-                                $floor  = (float) ($get('min_weight_kg') ?: $anchor);
-                                $top    = (float) ($get('max_weight_kg') ?: $anchor);
+                                $step = (float) ($get('weight_step_kg') ?: 1);
+                                $floor = (float) ($get('min_weight_kg') ?: $anchor);
+                                $top = (float) ($get('max_weight_kg') ?: $anchor);
 
                                 if ($anchor <= 0 || $step <= 0 || $top <= $floor) {
                                     return 'Set a lightest and heaviest above to offer a choice '
@@ -187,7 +188,7 @@ class GoatForm
                                 // Same grid the buyer's selector will land on:
                                 // counted outward from the advertised weight so
                                 // that weight is always one of the stops.
-                                $low  = $anchor - floor(($anchor - min($floor, $anchor)) / $step + 0.000001) * $step;
+                                $low = $anchor - floor(($anchor - min($floor, $anchor)) / $step + 0.000001) * $step;
                                 $high = $anchor + floor((max($top, $anchor) - $anchor) / $step + 0.000001) * $step;
 
                                 $line = 'Buyers will choose between '.round($low, 2).' kg and '
@@ -222,10 +223,10 @@ class GoatForm
                             ->label('Rate per kg')
                             ->columnSpanFull()
                             ->content(function (callable $get): string {
-                                $symbol = \App\Models\Setting::currencySymbol();
+                                $symbol = Setting::currencySymbol();
                                 $weight = (float) $get('weight_kg');
-                                $sale   = (float) $get('sale_price');
-                                $price  = $sale > 0 && $sale < (float) $get('price')
+                                $sale = (float) $get('sale_price');
+                                $price = $sale > 0 && $sale < (float) $get('price')
                                     ? $sale
                                     : (float) $get('price');
 
@@ -235,7 +236,7 @@ class GoatForm
                                 }
 
                                 $rate = number_format($price / $weight, 2);
-                                $max  = (float) $get('max_weight_kg');
+                                $max = (float) $get('max_weight_kg');
 
                                 $line = $symbol.$rate.' / kg — worked out from '.$symbol
                                     .number_format($price, 2).' at '.$weight.' kg.';
@@ -284,10 +285,10 @@ class GoatForm
                     Section::make()->columns(2)->schema([
                         Select::make('status')
                             ->options([
-                                'draft'     => 'Draft — hidden from the shop',
+                                'draft' => 'Draft — hidden from the shop',
                                 'published' => 'Published — visible and buyable',
-                                'sold'      => 'Sold',
-                                'archived'  => 'Archived',
+                                'sold' => 'Sold',
+                                'archived' => 'Archived',
                             ])
                             ->default('published')
                             ->required(),
@@ -300,8 +301,8 @@ class GoatForm
                         Select::make('approval_status')
                             ->label('Review status')
                             ->options([
-                                'draft'    => 'Draft',
-                                'pending'  => 'Awaiting review',
+                                'draft' => 'Draft',
+                                'pending' => 'Awaiting review',
                                 'approved' => 'Approved',
                                 'rejected' => 'Rejected',
                             ])
