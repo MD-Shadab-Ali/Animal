@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\DeliveryZones\Schemas;
 
 use App\Models\Setting;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -43,6 +43,13 @@ class DeliveryZoneForm
                     ->helperText('Orders over this amount ship free. Blank to always charge.'),
 
                 TextInput::make('sort_order')->numeric()->default(0),
+
+                Toggle::make('is_pickup')
+                    ->label('Buyer collects from the farm')
+                    ->helperText('Turns the address questions at checkout into a collection '
+                        .'time. Set the charge to 0 -- nothing is being delivered.')
+                    ->default(false)
+                    ->inline(false),
 
                 Toggle::make('is_active')->label('Offer this zone')->default(true)->inline(false),
             ]),

@@ -56,10 +56,15 @@ class GoatResource extends JsonResource
             /*
              * The real animals behind this listing, summarised.
              *
-             * Sent only where the relation has been loaded, so the shop grid
-             * does not pay for it. Where it is present the page shows these
-             * ranges instead of the listing's single age and weight -- which
-             * were one animal's facts standing in for every animal here.
+             * Loaded on the grids as well as the detail page, at the cost of one
+             * extra query. It used to be detail-only to keep the grid cheap, and
+             * the saving was paid for in the wrong currency: a card went on
+             * printing one animal's weight and age as though they described the
+             * whole listing, while the detail page for the same goat showed a
+             * range. A card that is cheap and wrong is not cheap.
+             *
+             * Where it is present, the page shows these ranges instead of the
+             * listing's single age and weight.
              */
             'pool' => $this->when(
                 $this->resource->relationLoaded('weights'),

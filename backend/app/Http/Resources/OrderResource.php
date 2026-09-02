@@ -4,6 +4,8 @@ namespace App\Http\Resources;
 
 use App\Models\Order;
 use App\Models\PaymentMethod;
+use App\Models\Setting;
+use App\Support\Pickup;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,7 +17,10 @@ class OrderResource extends JsonResource
             'id' => $this->id,
             'order_number' => $this->order_number,
             'status' => $this->status,
-            'status_label' => Order::STATUSES[$this->status] ?? $this->status,
+            // Worded for whoever is waiting: "Out for delivery" is a van on a
+            // road, and to someone who agreed to come and collect it would read
+            // as a reason to stay home.
+            'status_label' => $this->buyerStatusLabel(),
             'payment_method' => $this->payment_method,
             'payment_plan' => $this->payment_plan,
             'payment_status' => $this->payment_status,
@@ -39,6 +44,25 @@ class OrderResource extends JsonResource
                 'estimate' => $this->delivery_estimate,
                 'notes' => $this->order_notes,
             ],
+
+            /*
+             * Only on orders the buyer is collecting. Sent with the order
+             * rather than fetched separately because it is what the buyer
+             * needs in front of them on the day: where to come, when they said
+             * they would, and how to find the place.
+             *
+             * A list of nearby guest houses used to ride along here, for buyers
+             * travelling far enough that getting home the same day was a
+             * question. The farm lets rooms of its own now, so that question is
+             * answered by a booking rather than by somebody else's phone
+             * number.
+             */
+            'pickup' => $this->when($this->isPickup(), fn () => [
+                'at' => $this->pickup_at?->toIso8601String(),
+                'address' => Setting::get('contact_address'),
+                'phone' => Setting::get('contact_phone'),
+                'instructions' => Pickup::instructions(),
+            ]),
 
             'totals' => [
                 'subtotal' => (float) $this->subtotal,

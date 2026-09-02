@@ -7,8 +7,8 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -47,13 +47,21 @@ class ManageSettings extends Page
 
     /** Human labels for each settings group, in the order they should appear. */
     private const GROUP_LABELS = [
-        'general'    => ['General', 'heroicon-o-home'],
-        'contact'    => ['Contact', 'heroicon-o-phone'],
-        'social'     => ['Social links', 'heroicon-o-share'],
-        'commerce'   => ['Shop', 'heroicon-o-shopping-cart'],
+        'general' => ['General', 'heroicon-o-home'],
+        'contact' => ['Contact', 'heroicon-o-phone'],
+        'social' => ['Social links', 'heroicon-o-share'],
+        'commerce' => ['Shop', 'heroicon-o-shopping-cart'],
         'marketplace' => ['Marketplace', 'heroicon-o-building-storefront'],
+        // Listed here rather than left to the catch-all below, which appends
+        // unknown groups after SEO with no icon. Collection hours were sitting
+        // at the end of the row unmarked, so the one person who needed to fill
+        // them in could not find them.
+        'pickup' => ['Farm collection', 'heroicon-o-map-pin'],
+        // And the same courtesy for the rooms, before the same thing happens to
+        // the check-in times and the house rules.
+        'homestay' => ['Homestay', 'heroicon-o-home-modern'],
         'appearance' => ['Appearance', 'heroicon-o-paint-brush'],
-        'seo'        => ['SEO & tracking', 'heroicon-o-magnifying-glass'],
+        'seo' => ['SEO & tracking', 'heroicon-o-magnifying-glass'],
     ];
 
     public function mount(): void
@@ -112,15 +120,15 @@ class ManageSettings extends Page
     {
         $field = match ($setting->type) {
             'textarea' => Textarea::make($setting->key)->rows(3)->columnSpanFull(),
-            'boolean'  => Toggle::make($setting->key)->inline(false),
-            'number'   => TextInput::make($setting->key)->numeric(),
-            'color'    => ColorPicker::make($setting->key),
-            'image'    => FileUpload::make($setting->key)
+            'boolean' => Toggle::make($setting->key)->inline(false),
+            'number' => TextInput::make($setting->key)->numeric(),
+            'color' => ColorPicker::make($setting->key),
+            'image' => FileUpload::make($setting->key)
                 ->image()
                 ->directory('settings')
                 ->maxSize(2048),
-            'json'     => Textarea::make($setting->key)->rows(4)->columnSpanFull(),
-            default    => TextInput::make($setting->key)->maxLength(500),
+            'json' => Textarea::make($setting->key)->rows(4)->columnSpanFull(),
+            default => TextInput::make($setting->key)->maxLength(500),
         };
 
         return $field

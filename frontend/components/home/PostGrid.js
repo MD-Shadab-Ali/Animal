@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import BorderGlow from '@/components/ui/BorderGlow';
 import { formatDate } from '@/lib/format';
 
 export default function PostGrid({ posts = [], columns = 3 }) {
@@ -7,8 +8,14 @@ export default function PostGrid({ posts = [], columns = 3 }) {
   return (
     <div className={`row row-cols-1 row-cols-md-${Math.min(columns, 3)} g-3 g-lg-4`}>
       {posts.map((post, index) => (
-        <div className="col" key={post.slug}>
-          <article className="card-goat h-100 rise" style={{ animationDelay: `${index * 45}ms` }}>
+        <div className="col rise" key={post.slug} style={{ animationDelay: `${index * 45}ms` }}>
+          {/*
+            The glow wrapper is the card surface now, so the article inside
+            gives up its own background and border -- see .card-goat--bare.
+            Everything else about the card is untouched.
+          */}
+          <BorderGlow className="h-100">
+            <article className="card-goat card-goat--bare h-100">
             <Link href={`/blog/${post.slug}`} className="card-goat__media d-block" aria-label={post.title}>
               {post.cover_image
                 ? <img src={post.cover_image} alt="" loading="lazy" />
@@ -29,7 +36,8 @@ export default function PostGrid({ posts = [], columns = 3 }) {
                 Read guide <i className="bi bi-arrow-right" aria-hidden="true" />
               </span>
             </div>
-          </article>
+            </article>
+          </BorderGlow>
         </div>
       ))}
     </div>

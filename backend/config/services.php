@@ -86,6 +86,18 @@ return [
         'ca_bundle'  => env('RECAPTCHA_CA_BUNDLE', env('GOOGLE_CA_BUNDLE')),
     ],
 
+    /*
+     * The Next.js storefront, for cache purges.
+     *
+     * Both blank means the backend simply does not tell the shop anything and
+     * the shop falls back to its own revalidate timers -- which is the right
+     * behaviour for tests and for a backend deployed without a storefront.
+     */
+    'storefront' => [
+        'url' => env('FRONTEND_URL'),
+        'revalidate_secret' => env('REVALIDATE_SECRET'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

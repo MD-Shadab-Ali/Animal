@@ -1,6 +1,6 @@
 'use client';
 
-import { formatMoney } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
 
 export const PLAN_LABELS = {
   full: {
@@ -37,7 +37,12 @@ export default function CheckoutFields({
   form, errors, update, prefilled,
   options, settings, selectedZone, selectedMethod, subtotalAfterDiscount, orderTotal,
   paymentPlan, step = 1,
+  pickupDate, pickupTime, onPickupDate, onPickupTime,
 }) {
+  // Collection is a property of the zone the buyer chose, so everything below
+  // follows from that one answer rather than from a second question.
+  const isPickup = Boolean(selectedZone?.is_pickup);
+  const pickup = options?.pickup;
   const field = (key, label, { type = 'text', required = false, colClass = 'col-md-6', as = 'input', rows } = {}) => (
     <div className={colClass} key={key}>
       <label className="form-label" htmlFor={key}>
@@ -72,20 +77,26 @@ export default function CheckoutFields({
     <div className="d-grid gap-4">
       {onDelivery && (
       <section className="panel">
-        <h2 className="h6 mb-1">Delivery details</h2>
+        <h2 className="h6 mb-1">{isPickup ? 'Your details' : 'Delivery details'}</h2>
         <p className="small text-soft mb-3">
-          {prefilled
-            ? 'Filled in from your account. Change anything here for this order only, or update it in your addresses.'
-            : 'Where the goat is going, and who to call on arrival. We will keep this on your account so the next order fills itself in.'}
+          {isPickup
+            ? 'Who is coming for the goat, so we know who to hand it to and how to reach you if anything changes.'
+            : (prefilled
+              ? 'Filled in from your account. Change anything here for this order only, or update it in your addresses.'
+              : 'Where the goat is going, and who to call on arrival. We will keep this on your account so the next order fills itself in.')}
         </p>
         <div className="row g-3">
           {field('customer_name', 'Full name', { required: true })}
           {field('customer_phone', 'Phone number', { type: 'tel', required: true })}
           {field('customer_email', 'Email', { type: 'email', colClass: 'col-12', required: true })}
-          {field('address_line', 'Street address', { required: true })}
-          {field('city', 'City / district', { required: true })}
-          {field('area', 'Area / thana', { required: true })}
-          {field('postal_code', 'Postal code', { required: true })}
+
+          {/* Nothing is being delivered, so there is nowhere to deliver it to.
+              Asking for a postal code we will never read only makes the buyer
+              wonder which address we intend to use. */}
+          {!isPickup && field('address_line', 'Street address', { required: true })}
+          {!isPickup && field('city', 'City / district', { required: true })}
+          {!isPickup && field('area', 'Area / thana', { required: true })}
+          {!isPickup && field('postal_code', 'Postal code', { required: true })}
         </div>
       </section>
 
@@ -133,10 +144,72 @@ export default function CheckoutFields({
           </p>
         )}
 
-        {selectedZone?.free_above && subtotalAfterDiscount < selectedZone.free_above && (
+        {!isPickup && selectedZone?.free_above && subtotalAfterDiscount < selectedZone.free_above && (
           <p className="small text-soft mt-2 mb-0">
             Spend {formatMoney(selectedZone.free_above - subtotalAfterDiscount, settings)} more for free delivery in this zone.
           </p>
+        )}
+
+        {/*
+         * The whole point of offering collection at all. An open invitation to
+         * come by sometime is how somebody ends up at a farm gate at dusk with
+         * an animal and no way home; naming an hour in advance means the goat
+         * is ready and somebody is expecting them.
+         */}
+        {isPickup && pickup && (
+          <div className="mt-3 pt-3 border-top">
+            <div className="row g-3">
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="pickup_date">
+                  Day you will come <span className="text-danger">*</span>
+                </label>
+                <input
+                  id="pickup_date"
+                  type="date"
+                  className={`form-control ${errors.pickup_at ? 'is-invalid' : ''}`}
+                  min={pickup.earliest_date}
+                  max={pickup.latest_date}
+                  value={pickupDate || ''}
+                  onChange={onPickupDate}
+                />
+              </div>
+
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="pickup_time">
+                  Time <span className="text-danger">*</span>
+                </label>
+                <select
+                  id="pickup_time"
+                  className={`form-select ${errors.pickup_at ? 'is-invalid' : ''}`}
+                  value={pickupTime || ''}
+                  onChange={onPickupTime}
+                >
+                  <option value="">Choose a time…</option>
+                  {(pickup.slots || []).map((slot) => (
+                    <option key={slot} value={slot}>{slot}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {errors.pickup_at && (
+              <div className="invalid-feedback d-block">{errors.pickup_at[0]}</div>
+            )}
+
+            {/* The window, said before anybody picks. A buyer who chooses a
+                date months out and is only told afterwards has been let walk
+                into it -- and the raw 2026-09-03 this used to print was not a
+                date anyone reads aloud. */}
+            <p className="small text-soft mt-2 mb-0">
+              {pickup.address && <>Come to <strong className="text-ink">{pickup.address}</strong>. </>}
+              Any day from {formatDate(pickup.earliest_date)} to {formatDate(pickup.latest_date)},
+              on the hour between {pickup.slots?.[0]} and {pickup.slots?.[pickup.slots.length - 1]}.
+            </p>
+
+            {pickup.instructions && (
+              <p className="small text-soft mt-2 mb-0">{pickup.instructions}</p>
+            )}
+          </div>
         )}
       </section>
 

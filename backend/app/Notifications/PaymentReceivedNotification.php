@@ -24,21 +24,27 @@ class PaymentReceivedNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $symbol = Setting::get('currency_symbol', '');
-        $order = $this->payment->order;
+        // An order of goats, or a room booked for some nights. Everything below
+        // reads the same either way; only the noun changes.
+        $subject = $this->payment->subject();
+        $noun = $subject->paymentSubjectNoun();
         $frontend = rtrim((string) config('app.frontend_url'), '/');
 
         $message = (new MailMessage)
-            ->subject('Payment received — order '.$order->order_number)
+            ->subject('Payment received — '.$noun.' '.$subject->paymentReference())
             ->greeting('Thank you')
             ->line('We have received '.$symbol.number_format((float) $this->payment->amount, 2)
-                .' for order '.$order->order_number.'.');
+                .' for '.$noun.' '.$subject->paymentReference().'.');
 
-        $balance = $order->balance_due;
+        $balance = $subject->balanceDue();
 
         $message->line($balance > 0.009
             ? 'Still outstanding: '.$symbol.number_format($balance, 2).'.'
-            : 'That settles the order in full.');
+            : 'That settles the '.$noun.' in full.');
 
-        return $message->action('View your order', $frontend.'/account/orders/'.$order->order_number);
+        return $message->action(
+            'View your '.$noun,
+            $frontend.$subject->paymentSubjectPath(),
+        );
     }
 }

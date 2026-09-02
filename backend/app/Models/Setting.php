@@ -11,8 +11,22 @@ class Setting extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => Cache::forget('settings.all'));
-        static::deleted(fn () => Cache::forget('settings.all'));
+        static::saved(fn () => static::flushCache());
+        static::deleted(fn () => static::flushCache());
+    }
+
+    /**
+     * Drop the cached map.
+     *
+     * Public because the model events above only fire for writes that go
+     * through Eloquent. A migration inserting settings with the query builder
+     * -- the normal way to write one -- leaves a map cached for ever that has
+     * never heard of the new keys, so every one of them silently reads as its
+     * code default. Nothing looks broken; the values are simply ignored.
+     */
+    public static function flushCache(): void
+    {
+        Cache::forget('settings.all');
     }
 
     /** All settings as a flat key => casted value map. */
@@ -36,6 +50,7 @@ class Setting extends Model
      * used before the settings table is seeded.
      */
     public const FALLBACK_CURRENCY_CODE = 'NPR';
+
     public const FALLBACK_CURRENCY_SYMBOL = 'रु';
 
     public static function currencyCode(): string
@@ -58,10 +73,10 @@ class Setting extends Model
     {
         return match ($this->type) {
             'boolean' => filter_var($this->value, FILTER_VALIDATE_BOOLEAN),
-            'number'  => is_numeric($this->value) ? $this->value + 0 : null,
-            'json'    => json_decode((string) $this->value, true),
-            'image'   => $this->value ? asset('storage/'.$this->value) : null,
-            default   => $this->value,
+            'number' => is_numeric($this->value) ? $this->value + 0 : null,
+            'json' => json_decode((string) $this->value, true),
+            'image' => $this->value ? asset('storage/'.$this->value) : null,
+            default => $this->value,
         };
     }
 }

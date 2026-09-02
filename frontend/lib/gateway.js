@@ -19,7 +19,22 @@ export function isGatewayMethod(code) {
  * money that can be argued with.
  */
 export async function payThroughGateway(orderNumber, gateway, token) {
-  const response = await apiFetch(`/orders/${orderNumber}/pay/${gateway}`, {
+  return startPayment(`/orders/${orderNumber}/pay/${gateway}`, token);
+}
+
+/**
+ * The same handover, for a room.
+ *
+ * Nothing below this point knows the difference between a goat and a bed --
+ * the provider is opened, the browser leaves, and the server settles whatever
+ * the attempt was against when it comes back.
+ */
+export async function payForBooking(bookingNumber, gateway, token) {
+  return startPayment(`/bookings/${bookingNumber}/pay/${gateway}`, token);
+}
+
+async function startPayment(path, token) {
+  const response = await apiFetch(path, {
     method: 'POST',
     token,
     body: {},

@@ -30,6 +30,12 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
+        <!--
+            Blank keeps the suite off the network. Saving a goat tells the
+            storefront to drop its cached pages; unconfigured, that is a no-op
+            rather than an HTTP call to a dev server that may not be running.
+        -->
+        <env name="REVALIDATE_SECRET" value=""/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
     </php>

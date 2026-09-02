@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import SpotlightGrid from '@/components/ui/SpotlightGrid';
 
 export default function CategoryGrid({ categories = [], columns = 5 }) {
   if (!categories.length) return null;
@@ -9,13 +10,19 @@ export default function CategoryGrid({ categories = [], columns = 5 }) {
     5: 'row-cols-2 row-cols-md-3 row-cols-lg-5',
   }[columns] || 'row-cols-2 row-cols-md-3 row-cols-lg-5';
 
+  /*
+   * The grid stays a server component. SpotlightGrid is a client wrapper that
+   * finds these tiles by their data attribute and drives the glow from the
+   * pointer, so none of the markup below has to ship its own JavaScript.
+   */
   return (
-    <div className={`row g-3 ${columnClass}`}>
+    <SpotlightGrid className={`row g-3 ${columnClass}`}>
       {categories.map((category, index) => (
         <div className="col" key={category.slug}>
           <Link
             href={`/shop?category=${category.slug}`}
-            className="tile-cat rise"
+            className="tile-cat is-spotlit rise"
+            data-spotlight-card=""
             style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
           >
             <span className="tile-cat__icon">
@@ -28,6 +35,6 @@ export default function CategoryGrid({ categories = [], columns = 5 }) {
           </Link>
         </div>
       ))}
-    </div>
+    </SpotlightGrid>
   );
 }

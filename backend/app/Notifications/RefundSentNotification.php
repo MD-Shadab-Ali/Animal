@@ -24,16 +24,17 @@ class RefundSentNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $symbol = Setting::get('currency_symbol', '');
-        $order = $this->payment->order;
+        $subject = $this->payment->subject();
+        $noun = $subject->paymentSubjectNoun();
         $frontend = rtrim((string) config('app.frontend_url'), '/');
 
         $eta = $this->payment->arrival_eta;
 
         $message = (new MailMessage)
-            ->subject('Refund sent — order '.$order->order_number)
+            ->subject('Refund sent — '.$noun.' '.$subject->paymentReference())
             ->greeting('Your refund is on its way')
             ->line('We have sent '.$symbol.number_format((float) $this->payment->amount, 2)
-                .' back for order '.$order->order_number.'.')
+                .' back for '.$noun.' '.$subject->paymentReference().'.')
             ->line($this->payment->refund_destination
                 ? 'Sent to: '.$this->payment->refund_destination
                 : 'Sent by '.$this->payment->method_label.'.');
@@ -51,6 +52,9 @@ class RefundSentNotification extends Notification implements ShouldQueue
                 .' — quote this if you need to chase it.');
         }
 
-        return $message->action('View your order', $frontend.'/account/orders/'.$order->order_number);
+        return $message->action(
+            'View your '.$noun,
+            $frontend.$subject->paymentSubjectPath(),
+        );
     }
 }

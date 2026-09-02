@@ -38,6 +38,8 @@ export default function OrderDetailPage() {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [confirmingReceipt, setConfirmingReceipt] = useState(false);
   const [receipting, setReceipting] = useState(false);
+  const [confirmingOnWay, setConfirmingOnWay] = useState(false);
+  const [settingOff, setSettingOff] = useState(false);
 
   // The ?placed=1 flag lives in the URL, so it outlives whatever happens to the
   // order next. Greeting someone with "your order is in" after they cancelled
@@ -91,6 +93,26 @@ export default function OrderDetailPage() {
       toast.error(error.message || 'Could not confirm that just now.');
     } finally {
       setReceipting(false);
+    }
+  };
+
+  /*
+   * Collection only. Nobody but the buyer knows they have set off -- there is no
+   * driver to report it, and staff marking it would be guessing at somebody
+   * else's afternoon.
+   */
+  const onMyWay = async () => {
+    setConfirmingOnWay(false);
+    setSettingOff(true);
+
+    try {
+      const response = await apiFetch(`/orders/${number}/on-my-way`, { method: 'POST', token });
+      toast.success(response.message);
+      setOrder(response.data);
+    } catch (error) {
+      toast.error(error.message || 'Could not update that just now.');
+    } finally {
+      setSettingOff(false);
     }
   };
 
@@ -202,6 +224,21 @@ export default function OrderDetailPage() {
       />
 
       <ConfirmDialog
+        open={confirmingOnWay}
+        title="Setting off to collect?"
+        lines={[
+          'We will have the goat penned and ready for you.',
+          'Only say yes once you are actually on your way.',
+        ]}
+        confirmLabel="Yes, I'm on my way"
+        cancelLabel="Not yet"
+        tone="brand"
+        busy={settingOff}
+        onConfirm={onMyWay}
+        onCancel={() => setConfirmingOnWay(false)}
+      />
+
+      <ConfirmDialog
         open={confirmingCancel}
         title={`Cancel order ${order.order_number}?`}
         lines={cancelWarnings}
@@ -309,6 +346,7 @@ export default function OrderDetailPage() {
           <div className="panel">
             <OrderTimeline
               status={order.status}
+              collection={Boolean(order.pickup)}
               paid={order.refund?.amount || 0}
               refunded={order.refund?.sent || 0}
               formatAmount={(amount) => formatMoney(amount, settings)}
@@ -323,6 +361,26 @@ export default function OrderDetailPage() {
                 in their yard, so let them say so instead of waiting on a phone
                 call being relayed to staff. Kept against the tracker, because
                 the tracker is the thing it moves. */}
+            {/* Collection only, and only once the goat is prepared -- the two
+                buyer steps run in order, so this comes before "it arrived". */}
+            {order.pickup && order.status === 'processing' && (
+              <div className="mt-4 pt-3 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span className="small text-soft">
+                  <i className="bi bi-signpost-split me-1" aria-hidden="true" />
+                  Heading over? Tell us and we will have the goat ready.
+                </span>
+
+                <button
+                  type="button"
+                  className="btn btn-brand btn-sm px-3"
+                  onClick={() => setConfirmingOnWay(true)}
+                  disabled={settingOff}
+                >
+                  {settingOff ? 'Updating…' : "I'm on my way"}
+                </button>
+              </div>
+            )}
+
             {order.can_confirm_receipt && (
               <div className="mt-4 pt-3 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <span className="small text-soft">
@@ -619,26 +677,68 @@ export default function OrderDetailPage() {
             </dl>
           </div>
 
-          <div className="panel">
-            <h2 className="h6 mb-3">Delivery address</h2>
-            <address className="mb-0 small">
-              <strong>{order.customer.name}</strong><br />
-              {order.customer.phone}<br />
-              {order.shipping.address_line}<br />
-              {order.shipping.area && <>{order.shipping.area}<br /></>}
-              {order.shipping.city} {order.shipping.postal_code}
-            </address>
-            {order.shipping.zone && (
-              <p className="small text-soft mt-2 mb-0">
-                <i className="bi bi-geo-alt me-1" aria-hidden="true" />
-                {order.shipping.zone}
-              </p>
-            )}
+          {/*
+            * Collection and delivery are different promises, so they are not
+            * the same panel with a different heading. One says where we are
+            * bringing the goat; the other says where to come and when you said
+            * you would -- which is what the buyer will want in front of them
+            * on the morning, at the gate, on a phone.
+            */}
+          {order.pickup ? (
+            <div className="panel">
+              <h2 className="h6 mb-3">Collecting your goat</h2>
 
-            {order.shipping.notes && (
-              <p className="small text-soft mt-2 mb-0"><em>{order.shipping.notes}</em></p>
-            )}
-          </div>
+              <p className="mb-2">
+                <strong className="text-ink">{formatDateTime(order.pickup.at)}</strong>
+              </p>
+
+              <address className="mb-0 small">
+                {order.pickup.address}
+                {order.pickup.phone && <><br />{order.pickup.phone}</>}
+              </address>
+
+              {order.pickup.instructions && (
+                <p className="small text-soft mt-2 mb-0">{order.pickup.instructions}</p>
+              )}
+
+              <p className="small text-soft mt-2 mb-0">
+                Bring this order number. We will have the goat penned and ready.
+              </p>
+
+              {/*
+                * For anyone who has travelled far enough that getting home the
+                * same day is a real question. Recommendations the farm typed
+                * in, nothing more -- no room is held here and no money for one
+                * passes through this shop.
+                */}
+              {/* The same cards the buyer saw at checkout, so what they were
+                  shown before paying is still there on the day. */}
+              {order.shipping.notes && (
+                <p className="small text-soft mt-2 mb-0"><em>{order.shipping.notes}</em></p>
+              )}
+            </div>
+          ) : (
+            <div className="panel">
+              <h2 className="h6 mb-3">Delivery address</h2>
+              <address className="mb-0 small">
+                <strong>{order.customer.name}</strong><br />
+                {order.customer.phone}<br />
+                {order.shipping.address_line}<br />
+                {order.shipping.area && <>{order.shipping.area}<br /></>}
+                {order.shipping.city} {order.shipping.postal_code}
+              </address>
+              {order.shipping.zone && (
+                <p className="small text-soft mt-2 mb-0">
+                  <i className="bi bi-geo-alt me-1" aria-hidden="true" />
+                  {order.shipping.zone}
+                </p>
+              )}
+
+              {order.shipping.notes && (
+                <p className="small text-soft mt-2 mb-0"><em>{order.shipping.notes}</em></p>
+              )}
+            </div>
+          )}
         </aside>
       </div>
     </div>

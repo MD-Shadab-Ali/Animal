@@ -32,7 +32,7 @@ export default async function ShopPage({ searchParams }) {
   });
 
   const [goatsResponse, filtersResponse, categoriesResponse] = await Promise.all([
-    apiFetch(`/goats?${query.toString()}`, { revalidate: 30 }),
+    apiFetch(`/goats?${query.toString()}`, { revalidate: 30, tags: ['goats'] }),
     apiFetch('/goats/filters', { revalidate: 300 }),
     apiFetch('/categories', { revalidate: 300 }),
   ]);

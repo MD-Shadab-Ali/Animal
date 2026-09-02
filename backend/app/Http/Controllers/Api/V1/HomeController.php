@@ -71,7 +71,7 @@ class HomeController extends Controller
             ),
 
             'featured_goats' => GoatResource::collection(
-                Goat::with('category', 'seller')
+                Goat::with('category', 'seller', 'weights')
                     ->published()
                     ->featured()
                     ->orderBy('sort_order')
@@ -80,7 +80,7 @@ class HomeController extends Controller
             ),
 
             'latest_goats' => GoatResource::collection(
-                Goat::with('category', 'seller')
+                Goat::with('category', 'seller', 'weights')
                     ->published()
                     ->latest()
                     ->limit($limit)

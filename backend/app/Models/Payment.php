@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Contracts\Payable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Support\Collection;
 class Payment extends Model
 {
     protected $fillable = [
-        'reference', 'order_id', 'user_id', 'method', 'amount', 'currency',
+        'reference', 'order_id', 'booking_id', 'user_id', 'method', 'amount', 'currency',
         'gateway', 'gateway_ref', 'gateway_txn_id', 'gateway_status', 'gateway_payload',
         'type', 'status', 'source', 'transaction_reference', 'proof', 'note',
         'paid_at', 'confirmed_at', 'confirmed_by', 'created_by',
@@ -68,6 +69,24 @@ class Payment extends Model
         return $this->belongsTo(Order::class);
     }
 
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class);
+    }
+
+    /**
+     * The thing this money is for.
+     *
+     * Exactly one of the two is set -- the database enforces it -- so this
+     * never has to choose between them, only find which one it is. Everything
+     * that used to reach through `->order`, and would now be reaching through a
+     * null half the time, goes through here instead.
+     */
+    public function subject(): ?Payable
+    {
+        return $this->order ?? $this->booking;
+    }
+
     /** The customer the money came from. */
     public function payer(): BelongsTo
     {
@@ -80,16 +99,20 @@ class Payment extends Model
     }
 
     /**
-     * The goats this money is for.
+     * What this money is for.
      *
-     * A payment is against an order, and an order is a list of animals — so
-     * "who paid for what" has to be answerable without opening the order.
+     * An order is a list of animals and a booking is a room for some nights,
+     * and either way "who paid for what" has to be answerable without opening
+     * the thing itself.
+     *
+     * Still called goats() because that is what it returns for an order and
+     * every screen and test that asks it is asking about an order. It answers
+     * for a booking too rather than returning nothing, because the alternative
+     * is a payments table with blanks down one column.
      */
     public function goats(): Collection
     {
-        return $this->order?->items->map(fn (OrderItem $item) => trim(
-            $item->goat_name.($item->quantity > 1 ? ' x'.$item->quantity : '')
-        )) ?? collect();
+        return collect($this->subject()?->paymentSummaryLines() ?? []);
     }
 
     /** The same list, short enough for a table cell. */

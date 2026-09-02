@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch(path, { method = 'GET', body, token, revalidate, cache, signal } = {}) {
+export async function apiFetch(path, { method = 'GET', body, token, revalidate, cache, tags, signal } = {}) {
   // FormData carries file uploads. The browser must set its own Content-Type so
   // the multipart boundary is correct, so we deliberately leave the header off.
   const isUpload = typeof FormData !== 'undefined' && body instanceof FormData;
@@ -33,9 +33,15 @@ export async function apiFetch(path, { method = 'GET', body, token, revalidate, 
     ...(body !== undefined ? { body: isUpload ? body : JSON.stringify(body) } : {}),
   };
 
-  // Server-side rendering gets ISR; client-side calls always go to the network.
+  /*
+   * Server-side rendering gets ISR; client-side calls always go to the network.
+   *
+   * `tags` name what a response is about, so the admin panel can purge it the
+   * moment the data changes rather than leaving the storefront to notice on its
+   * own up to `revalidate` seconds later. See app/api/revalidate/route.js.
+   */
   if (typeof window === 'undefined') {
-    options.next = { revalidate: revalidate ?? 60 };
+    options.next = { revalidate: revalidate ?? 60, ...(tags ? { tags } : {}) };
     if (cache) options.cache = cache;
   } else {
     options.cache = 'no-store';

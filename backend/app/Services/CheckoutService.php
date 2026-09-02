@@ -114,7 +114,7 @@ class CheckoutService
             $goats = Goat::with('seller')->whereIn('id', $goatIds)->lockForUpdate()->get()->keyBy('id');
 
             $subtotal = 0.0;
-            $lines    = [];
+            $lines = [];
 
             // A listing sold by the kilo can appear on several lines at once,
             // one per weight, and they all draw on the same animals. Counted up
@@ -154,12 +154,12 @@ class CheckoutService
                 $subtotal += $lineTotal;
 
                 $lines[] = [
-                    'goat'         => $goat,
-                    'quantity'     => $item->quantity,
-                    'weight_kg'    => $goat->is_weight_priced ? (float) $item->weight_kg : null,
+                    'goat' => $goat,
+                    'quantity' => $item->quantity,
+                    'weight_kg' => $goat->is_weight_priced ? (float) $item->weight_kg : null,
                     'price_per_kg' => $goat->is_weight_priced ? (float) $goat->price_per_kg : null,
-                    'unit_price'   => $unitPrice,
-                    'line_total'   => $lineTotal,
+                    'unit_price' => $unitPrice,
+                    'line_total' => $lineTotal,
                 ];
             }
 
@@ -174,7 +174,7 @@ class CheckoutService
             // A coupon is applied to the cart, so it is redeemed by checking
             // the cart out. Letting it discount a single-item purchase would
             // spend a whole-basket voucher on one animal.
-            $coupon   = $wholeCart ? $cart->coupon : null;
+            $coupon = $wholeCart ? $cart->coupon : null;
             $discount = 0.0;
 
             if ($coupon && $coupon->isRedeemable($subtotal, $user->id)) {
@@ -182,44 +182,54 @@ class CheckoutService
             }
 
             $deliveryCharge = $zone->chargeFor($subtotal - $discount);
-            $total          = round($subtotal - $discount + $deliveryCharge, 2);
+            $total = round($subtotal - $discount + $deliveryCharge, 2);
 
             $order = Order::create([
-                'order_number'     => $this->orderNumber(),
-                'user_id'          => $user->id,
+                'order_number' => $this->orderNumber(),
+                'user_id' => $user->id,
                 'delivery_zone_id' => $zone->id,
-                'coupon_id'        => $discount > 0 ? $coupon?->id : null,
+                'coupon_id' => $discount > 0 ? $coupon?->id : null,
 
-                'customer_name'    => $data['customer_name'],
-                'customer_phone'   => $data['customer_phone'],
-                'customer_email'   => $data['customer_email'] ?? $user->email,
-                'address_line'     => $data['address_line'],
-                'area'             => $data['area'] ?? null,
-                'city'             => $data['city'],
-                'postal_code'      => $data['postal_code'] ?? null,
-                'order_notes'      => $data['order_notes'] ?? null,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
+                'customer_email' => $data['customer_email'] ?? $user->email,
+                /*
+                 * A collection order has no delivery address, and these two
+                 * columns cannot be null. The farm's own address goes in --
+                 * which is not a placeholder but the truth: that is where the
+                 * goat will be. It also means every invoice, admin screen and
+                 * seller view keeps rendering an address without knowing this
+                 * feature exists.
+                 */
+                'address_line' => $data['address_line'] ?? Setting::get('contact_address', 'Collection from the farm'),
+                'area' => $data['area'] ?? null,
+                'city' => $data['city'] ?? Setting::get('site_city', 'Kathmandu'),
+                'postal_code' => $data['postal_code'] ?? null,
+                'order_notes' => $data['order_notes'] ?? null,
+                // The agreed hour at the gate. Null on every delivery.
+                'pickup_at' => $data['pickup_at'] ?? null,
 
-                'subtotal'        => $subtotal,
-                'discount'        => $discount,
+                'subtotal' => $subtotal,
+                'discount' => $discount,
                 'delivery_charge' => $deliveryCharge,
                 // Kept with the order so the promise survives a zone being
                 // edited or removed later.
                 'delivery_estimate' => $zone->estimated_time,
-                'total'           => $total,
-                'currency'        => Setting::currencyCode(),
+                'total' => $total,
+                'currency' => Setting::currencyCode(),
 
-                'payment_method'   => $method->code,
-                'payment_plan'     => $plan,
-                'payment_status'   => 'unpaid',
-                'paid_amount'      => 0,
+                'payment_method' => $method->code,
+                'payment_plan' => $plan,
+                'payment_status' => 'unpaid',
+                'paid_amount' => 0,
                 // What has to be in before the goat moves. Null means nothing
                 // is wanted until it arrives at the door.
                 'advance_required' => match ($plan) {
-                    'full'    => $total,
+                    'full' => $total,
                     'advance' => $method->advanceFor($total),
-                    default   => null,
+                    default => null,
                 },
-                'status'           => 'pending',
+                'status' => 'pending',
             ]);
 
             foreach ($lines as $line) {
@@ -231,24 +241,24 @@ class CheckoutService
                 $commissionAmount = round($line['line_total'] * ($commissionRate / 100), 2);
 
                 OrderItem::create([
-                    'order_id'       => $order->id,
-                    'goat_id'        => $goat->id,
-                    'goat_name'      => $goat->name,
-                    'goat_sku'       => $goat->sku,
+                    'order_id' => $order->id,
+                    'goat_id' => $goat->id,
+                    'goat_name' => $goat->name,
+                    'goat_sku' => $goat->sku,
                     'goat_thumbnail' => $goat->thumbnail,
                     // Kept on the line so the order still reads correctly after
                     // the seller changes their rate.
-                    'weight_kg'      => $line['weight_kg'],
-                    'price_per_kg'   => $line['price_per_kg'],
-                    'unit_price'     => $line['unit_price'],
-                    'quantity'       => $line['quantity'],
-                    'line_total'     => $line['line_total'],
+                    'weight_kg' => $line['weight_kg'],
+                    'price_per_kg' => $line['price_per_kg'],
+                    'unit_price' => $line['unit_price'],
+                    'quantity' => $line['quantity'],
+                    'line_total' => $line['line_total'],
 
-                    'seller_id'         => $seller?->id,
-                    'seller_name'       => $seller?->farm_name,
-                    'commission_rate'   => $commissionRate,
+                    'seller_id' => $seller?->id,
+                    'seller_name' => $seller?->farm_name,
+                    'commission_rate' => $commissionRate,
                     'commission_amount' => $commissionAmount,
-                    'seller_earning'    => $seller ? round($line['line_total'] - $commissionAmount, 2) : 0,
+                    'seller_earning' => $seller ? round($line['line_total'] - $commissionAmount, 2) : 0,
                 ]);
 
                 if ($goat->track_stock) {
@@ -273,7 +283,7 @@ class CheckoutService
             if ($soleSeller && $order->delivery_charge > 0) {
                 $order->update([
                     'delivery_seller_id' => $soleSeller,
-                    'delivery_earning'   => $order->delivery_charge,
+                    'delivery_earning' => $order->delivery_charge,
                 ]);
             }
 

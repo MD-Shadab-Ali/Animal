@@ -977,10 +977,24 @@ button:disabled { cursor: not-allowed; }
 .card-goat__price del { font-size: .875rem; font-weight: 400; color: var(--muted); margin-left: .4rem; }
 
 /* ── Category tiles ──────────────────────────────────────── */
+/*
+ * A category tile.
+ *
+ * Capped in width rather than left to fill its column. Three across a 1140px
+ * container gave each tile 361px to hold a 62px icon and two short lines, so
+ * most of the box was empty and the row read as three slabs. The cap keeps the
+ * three-across arrangement and lets the space fall between the tiles, where it
+ * looks deliberate, instead of inside them.
+ *
+ * The cap only bites where a column is wider than it is: the four-across grid
+ * on /categories sits under 280px already and is unchanged.
+ */
 .tile-cat {
   display: block;
+  max-width: 280px;
+  margin-inline: auto;
   height: 100%;
-  padding: var(--space-lg) var(--space-md);
+  padding: var(--space-md);
   text-align: center;
   background: #fff;
   border: 1px solid var(--line);
@@ -988,21 +1002,36 @@ button:disabled { cursor: not-allowed; }
   transition: transform var(--speed) var(--ease), border-color var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
 }
 .tile-cat:hover { transform: translateY(-4px); border-color: var(--brand-primary); box-shadow: var(--shadow-md); }
+
+/*
+ * The icon and the padding were 98px of the tile's 166px. The two lines of text
+ * are the point of the tile, so the height came out of everything else.
+ */
 .tile-cat__icon {
-  width: 62px;
-  height: 62px;
-  margin: 0 auto .75rem;
-  border-radius: var(--radius-lg);
+  width: 44px;
+  height: 44px;
+  margin: 0 auto .5rem;
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--brand-primary);
   display: grid;
   place-items: center;
-  font-size: 1.6rem;
+  font-size: 1.25rem;
   overflow: hidden;
 }
 .tile-cat__icon img { width: 100%; height: 100%; object-fit: cover; }
 .tile-cat h3 { font-size: .9375rem; margin-bottom: .125rem; }
 .tile-cat p { font-size: .8125rem; color: var(--muted); margin: 0; }
+
+/*
+ * On the categories page the tiles take the full column instead of capping.
+ *
+ * Only the cap is lifted. The icon stays above the name, the name above the
+ * count, everything still centred -- the box gets wider and its contents sit
+ * exactly where they sat. Scoped to this page so the home page keeps the cap,
+ * where the space between tiles is what holds that row together.
+ */
+.cat-grid-wide .tile-cat { max-width: none; }
 
 /* ── Panels, page headers ────────────────────────────────── */
 .panel {
@@ -1058,6 +1087,22 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
  */
 .hero + .section { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 .hero + .section-tight { padding-top: clamp(.75rem, 2vw, 1.25rem); }
+
+/*
+ * The same double-count again, between two sections that share a background.
+ *
+ * Every .section closes with 72px and opens with 72px, so two plain ones in a
+ * row leave 144px of nothing -- which is what sat between "Shop by purpose" and
+ * "Featured goats". One section's worth of air is the gap; two is a hole.
+ *
+ * Sections on a tinted band are excluded on purpose. There the padding is not
+ * only spacing, it is the height of the colour itself: trimming the top would
+ * leave the band shallower above its heading than below it, and the join
+ * between two different backgrounds already reads as a break without help.
+ */
+.section:not(.bg-surface-alt) + .section:not(.bg-surface-alt) {
+  padding-top: clamp(1rem, 2.5vw, 1.5rem);
+}
 
 /*
  * ── Article hero ──────────────────────────────────────────
@@ -1585,6 +1630,547 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
  */
 @keyframes riseIn { from { transform: translateY(10px); } to { transform: none; } }
 .rise { animation: riseIn 340ms var(--ease) backwards; }
+
+/* ── A room at the farm, on its own page ─────────────────── */
+/*
+ * Every photograph at once rather than a carousel. Somebody deciding where to
+ * sleep wants to see the room, not to be shown it one frame at a time -- and a
+ * grid needs no JavaScript to reach the second picture.
+ *
+ * The first photo spans both columns because it is the one chosen as the
+ * room's face; the rest are supporting evidence.
+ */
+.room-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-sm);
+}
+.room-gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.room-gallery__lead {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 10 !important;
+  border-radius: var(--radius-lg) !important;
+}
+.room-gallery__empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--line-strong);
+  font-size: 3rem;
+}
+
+/*
+ * ── Border glow ───────────────────────────────────────────
+ *
+ * The care guide cards. Two numbers come from the pointer -- how near an edge
+ * it is, and which way it lies -- and everything below is derived from them
+ * with masks and custom properties. No JavaScript animates anything.
+ *
+ * Ported from React Bits, which needed no dependency to begin with. The palette
+ * is the brand's, and the surface is white rather than the near-black the
+ * original assumes, so the blend modes take the --light path.
+ */
+.border-glow {
+  --edge-proximity: 0;
+  --cursor-angle: 45deg;
+  --edge-sensitivity: 30;
+  --colour-sensitivity: calc(var(--edge-sensitivity) + 20);
+  --border-radius: 16px;
+  --glow-padding: 40px;
+  --cone-spread: 25;
+
+  position: relative;
+  display: grid;
+  isolation: isolate;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--line);
+  background: var(--card-bg, #fff);
+  overflow: visible;
+  transform: translate3d(0, 0, .01px);
+}
+
+/* A pale card needs ordinary blending; plus-lighter on white washes out. */
+.border-glow--light::after,
+.border-glow--light > .border-glow__edge { mix-blend-mode: normal; }
+
+.border-glow::before,
+.border-glow::after,
+.border-glow > .border-glow__edge {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transition: opacity .25s ease-out;
+  z-index: -1;
+}
+
+/* Nothing is drawn until the pointer is over the card. */
+.border-glow:not(:hover)::before,
+.border-glow:not(:hover)::after,
+.border-glow:not(:hover) > .border-glow__edge {
+  opacity: 0;
+  transition: opacity .75s ease-in-out;
+}
+
+/*
+ * The coloured border: a mesh of radial gradients painted into the border box
+ * only, then masked to a cone pointing at the cursor -- which is what makes the
+ * colour appear to travel round the edge as the pointer moves.
+ */
+.border-glow::before {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--card-bg, #fff) 0 100%) padding-box,
+    linear-gradient(rgb(255 255 255 / 0%) 0% 100%) border-box,
+    var(--gradient-one) border-box,
+    var(--gradient-two) border-box,
+    var(--gradient-three) border-box,
+    var(--gradient-four) border-box,
+    var(--gradient-five) border-box,
+    var(--gradient-six) border-box,
+    var(--gradient-seven) border-box,
+    var(--gradient-base) border-box;
+
+  opacity: calc((var(--edge-proximity) - var(--colour-sensitivity)) / (100 - var(--colour-sensitivity)));
+
+  mask-image: conic-gradient(
+    from var(--cursor-angle) at center,
+    black calc(var(--cone-spread) * 1%),
+    transparent calc((var(--cone-spread) + 15) * 1%),
+    transparent calc((100 - var(--cone-spread) - 15) * 1%),
+    black calc((100 - var(--cone-spread)) * 1%)
+  );
+}
+
+/* The faint wash of colour inside the card, kept away from the middle. */
+.border-glow::after {
+  border: 1px solid transparent;
+  background:
+    var(--gradient-one) padding-box,
+    var(--gradient-two) padding-box,
+    var(--gradient-three) padding-box,
+    var(--gradient-four) padding-box,
+    var(--gradient-five) padding-box,
+    var(--gradient-six) padding-box,
+    var(--gradient-seven) padding-box,
+    var(--gradient-base) padding-box;
+
+  mask-image:
+    linear-gradient(to bottom, black, black),
+    radial-gradient(ellipse at 50% 50%, black 40%, transparent 65%),
+    conic-gradient(from var(--cursor-angle) at center, transparent 5%, black 15%, black 85%, transparent 95%);
+  mask-composite: subtract, add;
+
+  opacity: calc(var(--fill-opacity, .5) * (var(--edge-proximity) - var(--colour-sensitivity)) / (100 - var(--colour-sensitivity)));
+  mix-blend-mode: soft-light;
+}
+
+/* The halo outside the card. */
+.border-glow > .border-glow__edge {
+  inset: calc(var(--glow-padding) * -1);
+  pointer-events: none;
+  mask-image: conic-gradient(
+    from var(--cursor-angle) at center,
+    black 2.5%, transparent 10%, transparent 90%, black 97.5%
+  );
+  opacity: calc((var(--edge-proximity) - var(--edge-sensitivity)) / (100 - var(--edge-sensitivity)));
+}
+
+.border-glow > .border-glow__edge::before {
+  content: '';
+  position: absolute;
+  inset: var(--glow-padding);
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px var(--glow-color),
+    inset 0 0 3px 0 var(--glow-color-50),
+    inset 0 0 15px 0 var(--glow-color-30),
+    inset 0 0 50px 2px var(--glow-color-10),
+    0 0 3px 0 var(--glow-color-50),
+    0 0 15px 0 var(--glow-color-30),
+    0 0 25px 2px var(--glow-color-20),
+    0 0 50px 2px var(--glow-color-10);
+}
+
+/* Clipped, not scrollable: the card's photograph has to meet its corners. */
+.border-glow__inner {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/*
+ * A .card-goat that has given up its own surface.
+ *
+ * The glow wrapper is the card now -- background, border and corners. Without
+ * this the two would stack into a card inside a card. Opt-in, because
+ * .card-goat is also the cart line, the order summary and the seller listing,
+ * and none of those wants its background taken away.
+ */
+.card-goat--bare {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.card-goat--bare:hover { transform: none; box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .border-glow::before,
+  .border-glow::after,
+  .border-glow > .border-glow__edge { transition: none; }
+}
+
+/*
+ * ── Cursor glow ───────────────────────────────────────────
+ *
+ * The reactive half of the category grid. SpotlightGrid.js sets the custom
+ * properties from the pointer; every animation below belongs to the browser.
+ *
+ * The original did this with GSAP tweens. Nothing here needs a tween engine --
+ * these are transitions between two numbers, which is what CSS transitions are
+ * for, and doing it this way keeps the glow off the main thread.
+ */
+
+/* The wash that follows the cursor across the section. */
+.spotlight-orb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: var(--orb-size, 768px);
+  height: var(--orb-size, 768px);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
+  transition: opacity 220ms var(--ease);
+  background: radial-gradient(
+    circle,
+    rgb(var(--glow-color) / .14) 0%,
+    rgb(var(--glow-color) / .07) 18%,
+    rgb(var(--glow-color) / .03) 34%,
+    transparent 68%
+  );
+}
+
+/*
+ * A card that answers the cursor.
+ *
+ * --glow-intensity is the only value the pointer changes: at 0 the ring is
+ * invisible, at 1 it is fully lit. Everything else derives from it, so there is
+ * one number to reason about.
+ */
+.is-spotlit {
+  --glow-x: 50%;
+  --glow-y: 50%;
+  --glow-intensity: 0;
+  --glow-radius: 220px;
+  --magnet-x: 0px;
+  --magnet-y: 0px;
+
+  position: relative;
+  overflow: hidden;
+  transform: translate3d(var(--magnet-x), var(--magnet-y), 0);
+  transition: transform 300ms var(--ease), box-shadow 300ms var(--ease);
+}
+
+.is-spotlit:hover {
+  box-shadow:
+    0 10px 28px rgb(var(--glow-color) / .18),
+    0 0 30px rgb(var(--glow-color) / .12);
+}
+
+/*
+ * The ring: a radial gradient masked down to the border alone, so the glow
+ * traces the edge nearest the cursor instead of washing the whole card.
+ */
+.is-spotlit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    var(--glow-radius) circle at var(--glow-x) var(--glow-y),
+    rgb(var(--glow-color) / calc(var(--glow-intensity) * .9)) 0%,
+    rgb(var(--glow-color) / calc(var(--glow-intensity) * .45)) 32%,
+    transparent 62%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+/* Drifting sparks, added on hover and removed on leave. */
+.spotlight-spark {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: rgb(var(--glow-color) / .9);
+  box-shadow: 0 0 6px rgb(var(--glow-color) / .6);
+  animation: sparkDrift 2.6s var(--ease) infinite alternate both;
+}
+
+@keyframes sparkDrift {
+  from { transform: translate(0, 0) scale(0); opacity: 0; }
+  20%  { opacity: 1; }
+  to   { transform: translate(var(--drift-x), var(--drift-y)) scale(1); opacity: .35; }
+}
+
+/* The wash that opens out from where the card was clicked. */
+.spotlight-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgb(var(--glow-color) / .35) 0%,
+    rgb(var(--glow-color) / .18) 30%,
+    transparent 70%
+  );
+  animation: rippleOut 700ms var(--ease) forwards;
+}
+
+@keyframes rippleOut {
+  from { transform: scale(0); opacity: 1; }
+  to   { transform: scale(1); opacity: 0; }
+}
+
+/*
+ * SpotlightGrid stands itself down for reduced motion and coarse pointers, so
+ * none of the injected elements exist there. This covers the ring, which is
+ * pure CSS and would otherwise still light up.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .is-spotlit { transition: none; transform: none; }
+  .is-spotlit::after { display: none; }
+}
+
+/*
+ * ── Listing tile ──────────────────────────────────────────
+ *
+ * A full-bleed photograph, a themed wash rising from the bottom, and the whole
+ * surface reacting as one when the pointer is over it.
+ *
+ * Ported from a Tailwind/shadcn component rather than installed as one: this
+ * project runs Bootstrap and Sass, and pulling in Tailwind, a class-merging
+ * helper and a second icon set for one card would leave two of everything for
+ * whoever comes next. What follows is the same design in the tokens already here.
+ *
+ * Kept apart from .card-goat, which the blog grid, the cart and the seller
+ * pages also use -- restyling that would have redesigned the care guides by
+ * accident.
+ */
+.goat-tile {
+  /* The glow and the wash both read from this, so a card can be re-themed by
+     setting one value -- per category, per season -- without new rules. */
+  --tile-theme: 145 58% 20%;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 400px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+  box-shadow: 0 0 40px -18px hsl(var(--tile-theme) / .5);
+  transition: transform var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
+}
+
+/*
+ * Lifted rather than scaled. The original grew the whole card by 5%, which in a
+ * four-across grid pushes it under its neighbours; a lift reads as the same
+ * gesture and keeps the row intact.
+ */
+.goat-tile:hover,
+.goat-tile:focus-within {
+  transform: translateY(-6px);
+  box-shadow: 0 0 60px -15px hsl(var(--tile-theme) / .65);
+}
+
+.goat-tile__media {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: var(--surface-alt);
+}
+.goat-tile__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 500ms var(--ease);
+}
+.goat-tile:hover .goat-tile__media img,
+.goat-tile:focus-within .goat-tile__media img { transform: scale(1.08); }
+
+.goat-tile__empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 2.5rem;
+  color: var(--line-strong);
+}
+
+/* Sits between the photograph and the words, never over the words. */
+.goat-tile__wash {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    to top,
+    hsl(var(--tile-theme) / .94) 0%,
+    hsl(var(--tile-theme) / .62) 34%,
+    hsl(var(--tile-theme) / 0) 66%
+  );
+}
+
+.goat-tile__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex: 1;
+  padding: var(--space-lg);
+}
+
+.goat-tile__cat {
+  font-family: var(--font-heading), sans-serif;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .82);
+}
+
+.goat-tile__name {
+  display: block;
+  margin-top: .25rem;
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+  text-decoration: none;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .35);
+}
+.goat-tile__name:hover { color: #fff; text-decoration: underline; }
+
+/* Makes the whole tile follow the name's link. The wishlist button and the
+   action bar opt back out with a z-index of their own. */
+.goat-tile__name::after { content: ''; position: absolute; inset: 0; }
+
+.goat-tile__seller {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  margin-top: .375rem;
+  font-size: .8125rem;
+  color: rgba(255, 255, 255, .82);
+}
+
+/* The glass bar at the foot, whether it is a link or a button. */
+.goat-tile__action {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  width: 100%;
+  margin-top: var(--space-xl);
+  padding: .75rem 1rem;
+  border: 1px solid hsl(var(--tile-theme) / .45);
+  border-radius: var(--radius-md);
+  background: hsl(var(--tile-theme) / .28);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color var(--speed) var(--ease), border-color var(--speed) var(--ease);
+}
+.goat-tile__action:hover:not(:disabled) {
+  background: hsl(var(--tile-theme) / .52);
+  border-color: hsl(var(--tile-theme) / .7);
+  color: #fff;
+}
+.goat-tile__action:disabled { opacity: .65; cursor: not-allowed; }
+.goat-tile__action i { transition: transform var(--speed) var(--ease); }
+.goat-tile:hover .goat-tile__action i.bi-arrow-right { transform: translateX(4px); }
+
+/* Badges and the wishlist heart ride above the wash. */
+.goat-tile__tags {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+}
+.goat-tile__wish {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .18);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  transition: background-color var(--speed) var(--ease);
+}
+.goat-tile__wish:hover { background: rgba(255, 255, 255, .32); color: #fff; }
+.goat-tile__wish.is-on { background: #fff; color: var(--brand-primary); }
+
+/*
+ * Two across on a phone, where a 400px tile would be twice as tall as it is
+ * wide and the action would read "Choose / weight" over two lines.
+ */
+@media (max-width: 575.98px) {
+  .goat-tile { min-height: 290px; }
+  .goat-tile__body { padding: var(--space-md); }
+  .goat-tile__cat { font-size: .625rem; letter-spacing: .06em; }
+  .goat-tile__name { font-size: 1rem; }
+  .goat-tile__seller { font-size: .75rem; }
+  .goat-tile__action {
+    margin-top: var(--space-md);
+    padding: .5rem .625rem;
+    font-size: .75rem;
+    gap: .25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goat-tile,
+  .goat-tile__media img,
+  .goat-tile__action i { transition: none; }
+  .goat-tile:hover { transform: none; }
+  .goat-tile:hover .goat-tile__media img { transform: none; }
+}
 
 /* ── Sign in and sign up ─────────────────────────────────── */
 
@@ -2170,6 +2756,190 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
  * storefront sitting at 38px for every Add to cart, every wishlist heart and
  * the search button, with the carousel dots at 8px.
  */
+/* ── Homestay: finding a room, and holding one ──────────── */
+/*
+ * The block that stood here styled a list of other people's guest houses. The
+ * farm lets rooms of its own now, so what replaces it is the machinery of
+ * actually booking one: the date form above the grid, the box beside the room,
+ * and the two screens a guest reads afterwards.
+ */
+
+/*
+ * Three fields and a button, on one line where there is room for it.
+ *
+ * auto-fit rather than fixed columns: this sits full width on the listing page
+ * and has to fold to a single column on a phone without a breakpoint being
+ * told about it.
+ */
+.stay-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-sm);
+  align-items: end;
+  padding: var(--space-md);
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.stay-filters__go { align-self: end; }
+
+/* ── The booking box ─────────────────────────────────────── */
+/*
+ * Rides on .buybox, which already carries the sticky column and the border, so
+ * only what a room adds is below: the running total, and the two sets of
+ * choices a stay needs that a goat does not.
+ */
+.bookbox__sum {
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: .875rem;
+}
+.bookbox__sum > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: .25rem 0;
+  color: var(--muted);
+}
+.bookbox__total {
+  margin-top: .25rem;
+  padding-top: .5rem !important;
+  border-top: 1px solid var(--line);
+  color: var(--ink) !important;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+/*
+ * A radio that behaves like a card.
+ *
+ * The whole row is the label, so the target is the full width rather than a
+ * 13px dot -- the same reasoning the carousel dots were given a larger target
+ * for. The dot stays visible: hiding it would leave nothing saying that these
+ * are exclusive choices.
+ */
+.bookbox__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  padding: .625rem .75rem;
+  margin-top: .375rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: .875rem;
+  cursor: pointer;
+}
+.bookbox__choice:hover { border-color: var(--line-strong); background: var(--surface-alt); }
+.bookbox__choice input { margin-top: .2rem; flex-shrink: 0; }
+.bookbox__choice:has(input:checked) {
+  border-color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 6%, transparent);
+}
+.bookbox__choice em { font-style: normal; }
+
+/* ── A stay in the account ───────────────────────────────── */
+.booking-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 160ms var(--ease), transform 160ms var(--ease);
+}
+.booking-row:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+.booking-row__media {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
+  color: var(--line-strong);
+  font-size: 1.5rem;
+}
+.booking-row__media img { width: 100%; height: 100%; object-fit: cover; }
+
+/*
+ * The four steps of a stay.
+ *
+ * Each step carries the connector leading into it, so the line fills at the
+ * moment its step is reached -- one rule, and no bookkeeping about which
+ * segment belongs to which pair. The same arrangement the checkout rail uses,
+ * because it is the same idea.
+ */
+.stay-steps {
+  display: flex;
+  align-items: flex-start;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.stay-steps__step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .375rem;
+  text-align: center;
+  font-size: .75rem;
+  color: var(--muted);
+}
+.stay-steps__step + .stay-steps__step::before {
+  content: '';
+  position: absolute;
+  top: 1rem;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--line);
+}
+.stay-steps__step.is-done + .stay-steps__step.is-done::before,
+.stay-steps__step.is-done.is-now::before { background: var(--brand-primary); }
+.stay-steps__dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  color: var(--line-strong);
+}
+.stay-steps__step.is-done .stay-steps__dot {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #fff;
+}
+.stay-steps__step.is-done .stay-steps__label { color: var(--ink); font-weight: 500; }
+.stay-steps__step.is-now .stay-steps__label { color: var(--brand-primary); font-weight: 600; }
+
+/* The money on a booking, as a list that adds up. */
+.stay-totals { font-size: .875rem; }
+.stay-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: .25rem 0;
+  color: var(--muted);
+}
+.stay-totals__grand {
+  margin-top: .25rem;
+  padding-top: .5rem !important;
+  border-top: 1px solid var(--line);
+  color: var(--ink) !important;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
 /* ---------------------------------------------------------------- checkout */
 
 .checkout__head {

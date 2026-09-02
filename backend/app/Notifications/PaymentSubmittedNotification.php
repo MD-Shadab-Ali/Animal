@@ -24,19 +24,20 @@ class PaymentSubmittedNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $symbol = Setting::get('currency_symbol', '');
-        $order = $this->payment->order;
+        $subject = $this->payment->subject();
+        $noun = $subject->paymentSubjectNoun();
 
         $message = (new MailMessage)
-            ->subject('Payment to check — order '.$order->order_number)
+            ->subject('Payment to check — '.$noun.' '.$subject->paymentReference())
             ->greeting('A customer says they have paid')
-            ->line($order->customer_name.' submitted '.$symbol
+            ->line($subject->payerName().' submitted '.$symbol
                 .number_format((float) $this->payment->amount, 2)
-                .' for order '.$order->order_number.'.');
+                .' for '.$noun.' '.$subject->paymentReference().'.');
 
-        // Name the animals, so staff know what the money is against without
-        // having to open the order.
-        foreach ($this->payment->goats() as $goat) {
-            $message->line('• '.$goat);
+        // Name the animals, or the room and the dates, so staff know what the
+        // money is against without having to open it.
+        foreach ($this->payment->goats() as $line) {
+            $message->line('• '.$line);
         }
 
         return $message
@@ -52,7 +53,7 @@ class PaymentSubmittedNotification extends Notification implements ShouldQueue
     {
         return [
             'title' => 'Payment to check',
-            'body'  => $this->payment->order->order_number.' — '.$this->payment->goats_summary,
+            'body'  => $this->payment->subject()?->paymentReference().' — '.$this->payment->goats_summary,
             'url'   => '/admin/payments',
         ];
     }

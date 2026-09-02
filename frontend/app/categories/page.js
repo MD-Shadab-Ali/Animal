@@ -23,9 +23,16 @@ export default async function CategoriesPage() {
       </div>
 
       <div className="section">
-        <div className="container">
+        {/*
+          Three across, each tile filling its column rather than capping at the
+          width the home page uses -- there the grid is one block among many and
+          the gaps hold the row together, here it is the whole page. The class
+          lifts the cap and nothing else, so the icon, name and count stay
+          centred and stacked exactly as they are.
+        */}
+        <div className="container cat-grid-wide">
           {categories.length ? (
-            <CategoryGrid categories={categories} columns={4} />
+            <CategoryGrid categories={categories} columns={3} />
           ) : (
             <div className="empty">
               <i className="bi bi-folder" />

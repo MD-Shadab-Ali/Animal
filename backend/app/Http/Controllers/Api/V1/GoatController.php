@@ -18,7 +18,7 @@ class GoatController extends Controller
         $perPage = max(1, min($perPage, 48));
 
         $query = Goat::query()
-            ->with('category', 'seller')
+            ->with('category', 'seller', 'weights')
             ->published();
 
         $query->when($request->filled('category'), fn ($q) => $q->whereHas(
@@ -78,7 +78,7 @@ class GoatController extends Controller
     {
         $goat = Goat::published()->where('slug', $slug)->firstOrFail();
 
-        $related = Goat::with('category', 'seller')
+        $related = Goat::with('category', 'seller', 'weights')
             ->published()
             ->where('category_id', $goat->category_id)
             ->whereKeyNot($goat->getKey())

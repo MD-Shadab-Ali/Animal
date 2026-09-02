@@ -50,17 +50,35 @@ class ViewOrder extends ViewRecord
                         TextEntry::make('payment_status')
                             ->badge()
                             ->colors([
-                                'danger'  => 'unpaid',
+                                'danger' => 'unpaid',
                                 'warning' => 'partially_paid',
                                 'success' => 'paid',
-                                'gray'    => 'refunded',
+                                'gray' => 'refunded',
                             ]),
                         TextEntry::make('paid_amount')->money(fn ($record) => $record->currency),
                         TextEntry::make('transaction_id')->placeholder('—'),
                     ]),
             ]),
 
-            Section::make('Delivery address')
+            /*
+             * Staff need to know somebody is coming, and when, before they know
+             * anything else about the order -- so this sits above the address
+             * and appears only when there is an appointment to keep.
+             */
+            Section::make('Buyer is collecting')
+                ->visible(fn (Order $record) => $record->isPickup())
+                ->columns(2)
+                ->schema([
+                    TextEntry::make('pickup_at')
+                        ->label('At the gate')
+                        ->dateTime('l d M Y, g:i a')
+                        ->weight('bold'),
+                    TextEntry::make('customer_phone')->label('Reach them on'),
+                ]),
+
+            Section::make(fn (Order $record) => $record->isPickup()
+                ? 'Address on file'
+                : 'Delivery address')
                 ->columns(3)
                 ->schema([
                     TextEntry::make('address_line')->columnSpan(2),

@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
+use App\Contracts\Payable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
-class Order extends Model
+class Order extends Model implements Payable
 {
     use SoftDeletes;
 
@@ -16,6 +18,7 @@ class Order extends Model
         'order_number', 'user_id', 'delivery_zone_id', 'coupon_id',
         'customer_name', 'customer_phone', 'customer_email',
         'address_line', 'area', 'city', 'postal_code', 'order_notes',
+        'pickup_at',
         'subtotal', 'weight_adjustment', 'discount', 'delivery_charge', 'delivery_estimate', 'total', 'currency',
         'delivery_seller_id', 'delivery_earning', 'delivery_payout_id',
         'payment_method', 'payment_plan', 'payment_status', 'paid_amount',
@@ -26,25 +29,58 @@ class Order extends Model
     protected function casts(): array
     {
         return [
-            'subtotal'        => 'decimal:2',
-            'discount'        => 'decimal:2',
+            'subtotal' => 'decimal:2',
+            'discount' => 'decimal:2',
             'delivery_charge' => 'decimal:2',
             'delivery_earning' => 'decimal:2',
-            'total'           => 'decimal:2',
-            'paid_amount'     => 'decimal:2',
+            'total' => 'decimal:2',
+            'paid_amount' => 'decimal:2',
             'advance_required' => 'decimal:2',
-            'delivered_at'    => 'datetime',
-            'cancelled_at'    => 'datetime',
+            'pickup_at' => 'datetime',
+            'delivered_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
+    /**
+     * The buyer is coming to fetch this one.
+     *
+     * Read from the order rather than its zone: a zone can be renamed, retired
+     * or deleted, and an order from two Dashains ago still has to be able to
+     * say what was agreed.
+     */
+    public function isPickup(): bool
+    {
+        return $this->pickup_at !== null;
+    }
+
+    /**
+     * What the buyer is waiting for, in their words.
+     *
+     * "Out for delivery" is a van on a road. For someone who agreed to come
+     * and collect, the same state means the goat is penned and waiting, and
+     * telling them it is on its way would send them home.
+     */
+    public function buyerStatusLabel(): string
+    {
+        if ($this->isPickup()) {
+            return match ($this->status) {
+                'out_for_delivery' => 'Ready to collect',
+                'delivered' => 'Collected',
+                default => self::STATUSES[$this->status] ?? $this->status,
+            };
+        }
+
+        return self::STATUSES[$this->status] ?? $this->status;
+    }
+
     public const STATUSES = [
-        'pending'          => 'Pending',
-        'confirmed'        => 'Confirmed',
-        'processing'       => 'Processing',
+        'pending' => 'Pending',
+        'confirmed' => 'Confirmed',
+        'processing' => 'Processing',
         'out_for_delivery' => 'Out for delivery',
-        'delivered'        => 'Delivered',
-        'cancelled'        => 'Cancelled',
+        'delivered' => 'Delivered',
+        'cancelled' => 'Cancelled',
     ];
 
     /**
@@ -65,18 +101,18 @@ class Order extends Model
     public ?string $statusPhoto = null;
 
     public const PAYMENT_PLANS = [
-        'full'        => 'Paid in full up front',
-        'advance'     => 'Advance now, rest on delivery',
+        'full' => 'Paid in full up front',
+        'advance' => 'Advance now, rest on delivery',
         'on_delivery' => 'Pay on delivery',
     ];
 
     public const STATUS_COLORS = [
-        'pending'          => 'warning',
-        'confirmed'        => 'info',
-        'processing'       => 'primary',
+        'pending' => 'warning',
+        'confirmed' => 'info',
+        'processing' => 'primary',
         'out_for_delivery' => 'info',
-        'delivered'        => 'success',
-        'cancelled'        => 'danger',
+        'delivered' => 'success',
+        'cancelled' => 'danger',
     ];
 
     public function user(): BelongsTo
@@ -273,7 +309,7 @@ class Order extends Model
      * Only these can be checked against a scale at the door: a listing sold as
      * one animal at one price never promised a figure to compare against.
      */
-    public function weighedItems(): \Illuminate\Support\Collection
+    public function weighedItems(): Collection
     {
         return $this->items->filter(fn (OrderItem $item) => $item->weight_kg !== null)->values();
     }
@@ -309,9 +345,9 @@ class Order extends Model
             $commission = round($charged * ((float) $item->commission_rate / 100), 2);
 
             $item->forceFill([
-                'price_adjustment'  => $delta,
+                'price_adjustment' => $delta,
                 'commission_amount' => $item->seller_id ? $commission : 0,
-                'seller_earning'    => $item->seller_id ? round($charged - $commission, 2) : 0,
+                'seller_earning' => $item->seller_id ? round($charged - $commission, 2) : 0,
             ])->save();
 
             $adjustment += $delta;
@@ -321,7 +357,7 @@ class Order extends Model
 
         $this->forceFill([
             'weight_adjustment' => $adjustment,
-            'total'             => round((float) $this->subtotal + $adjustment
+            'total' => round((float) $this->subtotal + $adjustment
                 - (float) $this->discount + (float) $this->delivery_charge, 2),
         ])->save();
 
@@ -435,15 +471,207 @@ class Order extends Model
     public static function lineStatusFor(string $status): ?string
     {
         return match ($status) {
-            'processing'       => 'preparing',
+            'processing' => 'preparing',
             'out_for_delivery' => 'handed_over',
-            'delivered'        => 'handed_over',
-            default            => null,
+            'delivered' => 'handed_over',
+            default => null,
         };
     }
 
     public function getStatusLabelAttribute(): string
     {
         return self::STATUSES[$this->status] ?? $this->status;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payable
+    |--------------------------------------------------------------------------
+    |
+    | PaymentService used to take an Order and nothing else. It now takes
+    | anything that answers these, because the farm lets rooms as well as
+    | selling goats and there is only one ledger. Nothing about how an order
+    | takes money has changed -- this is the same behaviour, named.
+    |
+    | See App\Contracts\Payable.
+    |
+    */
+
+    public function paymentForeignKey(): string
+    {
+        return 'order_id';
+    }
+
+    public function payer(): ?User
+    {
+        return $this->user;
+    }
+
+    public function paymentTotal(): float
+    {
+        return (float) $this->total;
+    }
+
+    public function balanceDue(): float
+    {
+        return $this->balance_due;
+    }
+
+    public function amountDueNow(): float
+    {
+        return $this->amount_due_now;
+    }
+
+    public function paymentCurrency(): string
+    {
+        return (string) $this->currency;
+    }
+
+    public function defaultPaymentMethod(): ?string
+    {
+        return $this->payment_method;
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->status === 'cancelled';
+    }
+
+    public function refundableAmount(): float
+    {
+        return $this->refundable_amount;
+    }
+
+    public function paymentReference(): string
+    {
+        return (string) $this->order_number;
+    }
+
+    public function cancelledMessage(): string
+    {
+        return 'This order has been cancelled.';
+    }
+
+    public function settledMessage(): string
+    {
+        return 'This order is already paid in full.';
+    }
+
+    public function paymentSubjectNoun(): string
+    {
+        return 'order';
+    }
+
+    public function paymentSubjectPath(): string
+    {
+        return '/account/orders/'.$this->order_number;
+    }
+
+    public function payerName(): string
+    {
+        return (string) $this->customer_name;
+    }
+
+    public function payerEmail(): ?string
+    {
+        return $this->customer_email;
+    }
+
+    public function payerPhone(): ?string
+    {
+        return $this->customer_phone;
+    }
+
+    /** @return list<string> */
+    public function paymentSummaryLines(): array
+    {
+        return $this->goatLines()->all();
+    }
+
+    /**
+     * The animals on this order, named the way a person would name them.
+     *
+     * Lived on Payment as `goats()` and reached back through the relation to
+     * get here. Moved because a payment no longer necessarily has an order, and
+     * "what is on this order" was never the payment's fact to know.
+     *
+     * @return Collection<int, string>
+     */
+    public function goatLines(): Collection
+    {
+        return $this->items->map(fn (OrderItem $item) => trim(
+            $item->goat_name.($item->quantity > 1 ? ' x'.$item->quantity : '')
+        ));
+    }
+
+    /**
+     * Move the order on to whatever the money has just unlocked.
+     *
+     * Lifted out of PaymentService when the service stopped being about orders.
+     * The rules are unchanged, and they are order rules through and through:
+     * both of them turn on what a *delivery* means, and a room has no delivery.
+     *
+     * Confirming a payment is staff saying "this really arrived", which is the
+     * same act as confirming the order -- so they should not then have to go and
+     * say it a second time in a different dropdown.
+     */
+    public function settleAfterPayment(?Payment $trigger): static
+    {
+        // A refund is money leaving. Confirming one used to make the order look
+        // settled -- paid had just come down to meet the total -- and closed it
+        // as delivered on the strength of a payment going the other way.
+        if ($trigger?->isRefund()) {
+            return $this;
+        }
+
+        $order = $this;
+
+        // What the buyer promised up front is in, so the order is no longer
+        // merely placed: it is committed, and the goat can be prepared. Only
+        // from 'pending' — anything further along has already been moved by
+        // staff or the seller, and this must never drag an order backwards.
+        if ($order->status === 'pending'
+            && (float) $order->paid_amount > 0
+            && ! $order->awaiting_advance
+        ) {
+            $order->update(['status' => 'confirmed']);
+
+            $order = $order->fresh();
+        }
+
+        return $order->closeIfSettled();
+    }
+
+    /**
+     * Money handed over at the door is evidence the goat got there.
+     *
+     * Only when the money was actually due at the door. An order paid in full
+     * up front settled long before the animal moved, so its balance says
+     * nothing about whether anything arrived -- a person has to say that, and
+     * the buyer has a button for it. Closing those on payment released the
+     * seller's earnings for a goat nobody had seen.
+     *
+     * Only from `out_for_delivery`, for the same reason: paying for a goat
+     * still standing on the farm does not deliver it.
+     */
+    private function closeIfSettled(): static
+    {
+        if (! Setting::get('auto_deliver_on_payment', true)) {
+            return $this;
+        }
+
+        // Cash on delivery is collected at the handover, and the last slice of
+        // an advance is too. Anything else was paid before the journey began.
+        if (! in_array($this->payment_plan, ['on_delivery', 'advance'], true)) {
+            return $this;
+        }
+
+        if ($this->status !== 'out_for_delivery' || ! $this->isFullyPaid()) {
+            return $this;
+        }
+
+        $this->update(['status' => 'delivered']);
+
+        return $this->fresh();
     }
 }

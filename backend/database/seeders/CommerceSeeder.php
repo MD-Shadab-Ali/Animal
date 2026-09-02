@@ -21,30 +21,52 @@ class CommerceSeeder extends Seeder
             DeliveryZone::updateOrCreate(
                 ['name' => $name],
                 [
-                    'description'    => $desc,
-                    'charge'         => $charge,
-                    'free_above'     => $free,
+                    'description' => $desc,
+                    'charge' => $charge,
+                    'free_above' => $free,
                     'estimated_time' => $time,
-                    'is_active'      => true,
-                    'sort_order'     => $order,
+                    'is_active' => true,
+                    'sort_order' => $order,
                 ]
             );
         }
+
+        /*
+         * Collection, created after the delivery zones and sorted last.
+         *
+         * Order matters here beyond appearances: plenty of code and fixtures
+         * reach for the first active zone as a sensible default, and that
+         * default has to stay a delivery. Choosing to come and fetch the animal
+         * is a deliberate act, never something an order falls into.
+         */
+        DeliveryZone::updateOrCreate(
+            ['name' => 'Collect from the farm'],
+            [
+                'description' => 'Come to us and take the goat yourself. Pick a time and we '
+                    .'will have it ready and waiting.',
+                'is_pickup' => true,
+                'charge' => 0,
+                'free_above' => null,
+                'estimated_time' => 'Ready at the time you choose',
+                'is_active' => true,
+                'sort_order' => 99,
+            ]
+        );
 
         // Cash on delivery has no account to send to: the rider takes the cash
         // and staff record it, which is what closes the order.
         PaymentMethod::updateOrCreate(
             ['code' => 'cod'],
             [
-                'name'             => 'Cash on Delivery',
-                'instructions'     => 'Settle the remaining balance in cash when your goat is delivered. Please keep the exact change ready.',
-                'is_active'        => true,
+                'name' => 'Cash on Delivery',
+                'instructions' => 'Settle the remaining balance in cash when your goat is delivered. Please keep the exact change ready.',
+                'is_active' => true,
                 // Visible at checkout but not choosable: it settles an order,
                 // it does not start one.
                 'on_delivery_only' => true,
-                'supports_payout'  => false,
+                'supports_payout' => false,
                 'requires_advance' => false,
-                'sort_order'       => 1,
+                'sort_order' => 1,
             ]
         );
 
@@ -61,15 +83,15 @@ class CommerceSeeder extends Seeder
             PaymentMethod::updateOrCreate(
                 ['code' => $code],
                 [
-                    'name'            => $name,
-                    'instructions'    => $instructions,
-                    'is_active'       => false,
+                    'name' => $name,
+                    'instructions' => $instructions,
+                    'is_active' => false,
                     // Wallets and bank transfer move money both ways, so they are
                     // payout rails the moment an admin switches them on.
                     'supports_payout' => true,
                     'requires_bank_name' => $needsBank,
-                    'refund_eta'         => $refundEta,
-                    'sort_order'      => $i + 2,
+                    'refund_eta' => $refundEta,
+                    'sort_order' => $i + 2,
                 ]
             );
         }
@@ -77,13 +99,13 @@ class CommerceSeeder extends Seeder
         Coupon::updateOrCreate(
             ['code' => 'WELCOME5'],
             [
-                'description'          => '5% off your first goat',
-                'type'                 => 'percent',
-                'value'                => 5,
-                'min_order_amount'     => 15000,
-                'max_discount'         => 5000,
+                'description' => '5% off your first goat',
+                'type' => 'percent',
+                'value' => 5,
+                'min_order_amount' => 15000,
+                'max_discount' => 5000,
                 'usage_limit_per_user' => 1,
-                'is_active'            => true,
+                'is_active' => true,
             ]
         );
     }

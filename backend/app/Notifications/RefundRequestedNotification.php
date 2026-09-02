@@ -24,12 +24,13 @@ class RefundRequestedNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $symbol = Setting::get('currency_symbol', '');
-        $order = $this->payment->order;
+        $subject = $this->payment->subject();
+        $noun = $subject->paymentSubjectNoun();
 
         $message = (new MailMessage)
-            ->subject('Refund requested — order '.$order->order_number)
+            ->subject('Refund requested — '.$noun.' '.$subject->paymentReference())
             ->greeting('A buyer wants their money back')
-            ->line($order->customer_name.' cancelled order '.$order->order_number
+            ->line($subject->payerName().' cancelled '.$noun.' '.$subject->paymentReference()
                 .' and is asking for '.$symbol.number_format((float) $this->payment->amount, 2).' back.')
             ->line('Send it to: '.($this->payment->refund_destination ?: 'no details given'));
 
@@ -46,7 +47,7 @@ class RefundRequestedNotification extends Notification implements ShouldQueue
     {
         return [
             'title' => 'Refund requested',
-            'body'  => $this->payment->order->order_number.' — '.$this->payment->reference,
+            'body'  => $this->payment->subject()?->paymentReference().' — '.$this->payment->reference,
             'url'   => '/admin/refunds',
         ];
     }

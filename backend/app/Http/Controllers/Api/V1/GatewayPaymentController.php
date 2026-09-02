@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Contracts\Payable;
 use App\Http\Resources\PaymentEntryResource;
+use App\Models\Booking;
 use App\Models\Order;
 use App\Services\GatewayPaymentService;
 use Illuminate\Http\Request;
@@ -16,7 +18,7 @@ class GatewayPaymentController extends Controller
     public function __construct(private GatewayPaymentService $gateways) {}
 
     /**
-     * Open an attempt. Answers with where to send the buyer.
+     * Open an attempt against an order. Answers with where to send the buyer.
      */
     public function start(Request $request, string $orderNumber, string $gateway)
     {
@@ -24,22 +26,43 @@ class GatewayPaymentController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
+        return $this->open($request, $gateway, $order);
+    }
+
+    /**
+     * The same thing for a booked room.
+     *
+     * Nothing below this point knows the difference, and that is the point: the
+     * attempt, the redirect and the settlement are the gateway's business, not
+     * the subject's. Only finding the record differs.
+     */
+    public function startForBooking(Request $request, string $number, string $gateway)
+    {
+        $booking = Booking::where('booking_number', $number)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        return $this->open($request, $gateway, $booking);
+    }
+
+    private function open(Request $request, string $gateway, Payable $subject)
+    {
         $data = $request->validate([
             // Optional on purpose. What is owed today follows from the plan the
-            // order was placed on, and the order already knows it -- a browser
-            // recomputing money is a browser that can get it wrong.
+            // order or booking was placed on, and it already knows it -- a
+            // browser recomputing money is a browser that can get it wrong.
             'amount' => ['nullable', 'numeric', 'min:1'],
         ]);
 
         $start = $this->gateways->begin(
-            $order,
+            $subject,
             $request->user(),
             $gateway,
-            (float) ($data['amount'] ?? $order->amount_due_now),
+            (float) ($data['amount'] ?? $subject->amountDueNow()),
         );
 
         // The attempt they had open turned out to be paid, so there is nowhere
-        // to send them -- the order already moved on.
+        // to send them -- it has already moved on.
         if (($start['type'] ?? null) === 'settled') {
             return response()->json([
                 'message' => 'That payment already went through.',
@@ -88,11 +111,9 @@ class GatewayPaymentController extends Controller
 
         $target = rtrim(config('app.frontend_url'), '/');
 
-        // Back to the order it paid for, or to the order list if we could not
-        // work out which one -- never a dead end.
-        $path = $payment?->order
-            ? '/account/orders/'.$payment->order->order_number
-            : '/account';
+        // Back to the order or the booking it paid for, or to the account if we
+        // could not work out which -- never a dead end.
+        $path = $payment?->subject()?->paymentSubjectPath() ?? '/account';
 
         return redirect()->away($target.$path.'?payment='.$status);
     }

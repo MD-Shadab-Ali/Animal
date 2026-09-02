@@ -7,6 +7,7 @@ import { ADMIN_URL } from '@/lib/admin';
 
 const LINKS = [
   ['/account', 'My orders', 'bi-box-seam'],
+  ['/account/bookings', 'Your stays', 'bi-house-door'],
   ['/account/payments', 'Payments', 'bi-credit-card'],
   ['/account/wishlist', 'Wishlist', 'bi-heart'],
   ['/account/addresses', 'Addresses', 'bi-geo-alt'],

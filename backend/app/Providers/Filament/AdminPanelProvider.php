@@ -37,6 +37,10 @@ class AdminPanelProvider extends PanelProvider
             ->navigationGroups([
                 NavigationGroup::make('Catalog')->icon('heroicon-o-squares-2x2'),
                 NavigationGroup::make('Sales')->icon('heroicon-o-shopping-bag'),
+                // Named here rather than left to Filament's fallback, which
+                // appends unknown groups at the end with no icon -- the same
+                // way the settings page loses an unlabelled tab.
+                NavigationGroup::make('Homestay')->icon('heroicon-o-home-modern'),
                 NavigationGroup::make('Customers')->icon('heroicon-o-users'),
                 NavigationGroup::make('Marketplace')->icon('heroicon-o-building-storefront'),
                 NavigationGroup::make('Storefront')->icon('heroicon-o-paint-brush'),

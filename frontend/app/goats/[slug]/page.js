@@ -11,7 +11,7 @@ import { buildMetadata } from '@/lib/site';
 import { formatAge } from '@/lib/format';
 
 async function getGoat(slug) {
-  const response = await apiFetchOrNull(`/goats/${slug}`, { revalidate: 30 });
+  const response = await apiFetchOrNull(`/goats/${slug}`, { revalidate: 30, tags: ['goats'] });
   return response?.data ?? null;
 }
 
@@ -34,7 +34,7 @@ export default async function GoatPage({ params }) {
 
   if (!goat) notFound();
 
-  const related = (await apiFetchOrNull(`/goats/${slug}/related`, { revalidate: 60 }))?.data || [];
+  const related = (await apiFetchOrNull(`/goats/${slug}/related`, { revalidate: 60, tags: ['goats'] }))?.data || [];
 
   /*
    * A listing is not an animal.

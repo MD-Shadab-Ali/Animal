@@ -17,6 +17,9 @@ class NavigationSeeder extends Seeder
                     ['Home', '/'],
                     ['Shop', '/shop'],
                     ['Categories', '/categories'],
+                    // Beside the things the farm sells rather than at the end
+                    // of the row: a bed is one of them now.
+                    ['Homestay', '/homestay'],
                     ['Care guides', '/blog'],
                     ['Sell with us', '/sell'],
                     ['About', '/pages/about-us'],

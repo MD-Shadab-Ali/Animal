@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AddressController;
 use App\Http\Controllers\Api\V1\AnimalController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BookingController;
 use App\Http\Controllers\Api\V1\CartController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\CheckoutController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PasswordResetController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReviewController;
+use App\Http\Controllers\Api\V1\RoomController;
 use App\Http\Controllers\Api\V1\SellerAccountController;
 use App\Http\Controllers\Api\V1\SellerDirectoryController;
 use App\Http\Controllers\Api\V1\SellerListingController;
@@ -49,6 +51,26 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     Route::get('sellers', [SellerDirectoryController::class, 'index'])->name('sellers.index');
     Route::get('sellers/{slug}', [SellerDirectoryController::class, 'show'])->name('sellers.show');
+
+    /*
+    |--------------------------------------------------------------------------
+    | The farm's rooms
+    |--------------------------------------------------------------------------
+    |
+    | Public, because somebody works out where they will sleep before they sign
+    | in -- and because a room page that demanded an account to read the price
+    | would lose the guest at the first question.
+    |
+    | `rooms/options` is declared above `rooms/{slug}`, or the router would
+    | match "options" as a slug and answer 404 for a page that exists. The goat
+    | filters endpoint sits the same way and for the same reason.
+    |
+    */
+    Route::get('rooms', [RoomController::class, 'index'])->name('rooms.index');
+    Route::get('rooms/options', [RoomController::class, 'options'])->name('rooms.options');
+    Route::get('rooms/{slug}', [RoomController::class, 'show'])->name('rooms.show');
+    Route::get('rooms/{slug}/availability', [RoomController::class, 'availability'])
+        ->name('rooms.availability');
 
     Route::middleware('throttle:public-forms')->group(function () {
         Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
@@ -159,6 +181,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
         Route::get('orders/{orderNumber}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('orders/{orderNumber}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+        // Collection only: the buyer telling us they have set off.
+        Route::post('orders/{orderNumber}/on-my-way', [OrderController::class, 'onMyWay'])
+            ->name('orders.on-my-way');
+
         Route::post('orders/{orderNumber}/received', [OrderController::class, 'confirmReceipt'])
             ->name('orders.received');
         Route::post('orders/{orderNumber}/payments', [OrderController::class, 'pay'])
@@ -173,6 +199,44 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('orders/{orderNumber}/refunds', [OrderController::class, 'refund'])
             ->middleware('throttle:public-forms')
             ->name('orders.refund');
+
+        /*
+        |----------------------------------------------------------------------
+        | Booking a room
+        |----------------------------------------------------------------------
+        |
+        | Behind the account guard, unlike reading about one: a room is held
+        | for a named person who has to be reachable, and the stay has to appear
+        | somewhere they can find it again.
+        |
+        | Placing one is throttled with the checkout, which is the same shape of
+        | request -- generous for a person, tight for a script hunting for the
+        | last room of a festival weekend.
+        |
+        */
+        Route::post('rooms/{slug}/bookings', [BookingController::class, 'store'])
+            ->middleware('throttle:checkout')
+            ->name('rooms.book');
+
+        Route::get('bookings', [BookingController::class, 'index'])->name('bookings.index');
+        Route::get('bookings/{number}', [BookingController::class, 'show'])->name('bookings.show');
+        Route::post('bookings/{number}/cancel', [BookingController::class, 'cancel'])
+            ->name('bookings.cancel');
+
+        Route::post('bookings/{number}/payments', [BookingController::class, 'pay'])
+            ->middleware('throttle:public-forms')
+            ->name('bookings.pay');
+
+        // Opening an online payment for a room. The provider sends the guest
+        // back to the same handler an order's payment returns to -- it settles
+        // whatever the attempt was for.
+        Route::post('bookings/{number}/pay/{gateway}', [GatewayPaymentController::class, 'startForBooking'])
+            ->middleware('throttle:public-forms')
+            ->name('bookings.pay.gateway');
+
+        Route::post('bookings/{number}/refunds', [BookingController::class, 'refund'])
+            ->middleware('throttle:public-forms')
+            ->name('bookings.refund');
 
         Route::get('addresses', [AddressController::class, 'index'])->name('addresses.index');
         Route::post('addresses', [AddressController::class, 'store'])->name('addresses.store');

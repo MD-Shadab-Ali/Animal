@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Order;
+use App\Contracts\Payable;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
 use App\Models\User;
@@ -48,7 +48,7 @@ class GatewayPaymentService
     /**
      * Open an attempt and say where to send the buyer.
      */
-    public function begin(Order $order, User $payer, string $methodCode, float $amount): array
+    public function begin(Payable $subject, User $payer, string $methodCode, float $amount): array
     {
         $gateway = $this->gatewayFor($methodCode);
 
@@ -66,31 +66,32 @@ class GatewayPaymentService
             ]);
         }
 
-        if ($order->status === 'cancelled') {
+        if ($subject->isCancelled()) {
             throw ValidationException::withMessages([
-                'amount' => ['This order has been cancelled.'],
+                'amount' => [$subject->cancelledMessage()],
             ]);
         }
 
-        if ($order->isFullyPaid()) {
+        if ($subject->isFullyPaid()) {
             throw ValidationException::withMessages([
-                'amount' => ['This order is already paid in full.'],
+                'amount' => [$subject->settledMessage()],
             ]);
         }
 
-        // balance_due, matching the manual claim path. An accessor that does not
+        // The balance, matching the manual claim path. An accessor that does not
         // exist reads as null, casts to zero, and turns every amount into an
         // overpayment -- which is exactly what it did.
-        if ($amount <= 0 || $amount - (float) $order->balance_due > 0.01) {
+        if ($amount <= 0 || $amount - $subject->balanceDue() > 0.01) {
             throw ValidationException::withMessages([
-                'amount' => ['That is more than is left to pay on this order.'],
+                'amount' => ['That is more than is left to pay on this '
+                    .$subject->paymentSubjectNoun().'.'],
             ]);
         }
 
         // A buyer who closed the tab has a pending attempt sitting there. Ask
         // about it before opening another, or an abandoned attempt would block
         // every retry -- and a paid-but-unreported one would be lost.
-        $settled = $this->closeOpenAttempts($order);
+        $settled = $this->closeOpenAttempts($subject);
 
         if ($settled) {
             return ['type' => 'settled', 'payment' => $settled];
@@ -98,9 +99,9 @@ class GatewayPaymentService
 
         $payment = Payment::create([
             'reference' => $this->payments->reference(),
-            'order_id' => $order->id,
+            $subject->paymentForeignKey() => $subject->getKey(),
             'user_id' => $payer->id,
-            'currency' => $order->currency,
+            'currency' => $subject->paymentCurrency(),
             'method' => $method->code,
             'amount' => $amount,
             'type' => 'payment',
@@ -110,7 +111,7 @@ class GatewayPaymentService
             'gateway' => $method->code,
             // Ours, not theirs, and made before the buyer leaves: an attempt
             // that never comes back is still something we can ask about.
-            'gateway_ref' => strtoupper($order->order_number.'-'.Str::random(6)),
+            'gateway_ref' => strtoupper($subject->paymentReference().'-'.Str::random(6)),
         ]);
 
         try {
@@ -199,12 +200,13 @@ class GatewayPaymentService
     }
 
     /**
-     * Resolve attempts left open on an order. Returns one that turned out to
-     * be paid, if any, so the caller stops rather than charging twice.
+     * Resolve attempts left open on an order or a booking. Returns one that
+     * turned out to be paid, if any, so the caller stops rather than charging
+     * twice.
      */
-    public function closeOpenAttempts(Order $order): ?Payment
+    public function closeOpenAttempts(Payable $subject): ?Payment
     {
-        $open = $order->payments()
+        $open = $subject->payments()
             ->where('type', 'payment')
             ->where('status', 'pending')
             ->whereNotNull('gateway')

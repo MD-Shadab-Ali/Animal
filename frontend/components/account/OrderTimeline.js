@@ -19,6 +19,35 @@ export const BUYER_STATUS_LABELS = {
   cancelled: 'Cancelled',
 };
 
+/*
+ * The same journey, for an order the buyer is collecting.
+ *
+ * Nothing is dispatched and nothing arrives, so the last two steps cannot keep
+ * their delivery names: "On the way" describes a van that does not exist, and
+ * "Delivered" describes an event that never happens. The statuses underneath
+ * are unchanged -- this is only what the buyer is told they mean.
+ */
+export const COLLECTION_STATUS_LABELS = {
+  ...BUYER_STATUS_LABELS,
+  // The buyer's own step: on a collection the farm cannot know when somebody
+  // has set off, so this is theirs to set rather than staff's to guess.
+  out_for_delivery: 'On the way to collect',
+  delivered: 'Collected',
+};
+
+const COLLECTION_HEADLINES = {
+  pending: 'Order placed',
+  confirmed: 'Order confirmed',
+  processing: 'Preparing your goat',
+  out_for_delivery: 'On the way to collect',
+  delivered: 'Collected',
+};
+
+const COLLECTION_ICONS = {
+  out_for_delivery: 'bi-bag-check',
+  delivered: 'bi-check-circle',
+};
+
 // The progression, in order. Cancelled is a status but not a step.
 const STEPS = [
   ['pending', BUYER_STATUS_LABELS.pending, 'bi-bag-check'],
@@ -44,6 +73,15 @@ const HEADLINES = {
 
 export default function OrderTimeline({
   status,
+  /*
+   * True when the buyer is coming to the farm rather than being delivered to.
+   *
+   * The order knows this and the tracker did not, so a collection order was
+   * being told its goat was "On the way" and would be "Delivered" -- and the
+   * estimate, which for a collection reads "Ready at the time you choose", was
+   * being spliced into "Usually arrives within ... of dispatch."
+   */
+  collection = false,
   paid = 0,
   refunded = 0,
   formatAmount,
@@ -79,6 +117,10 @@ export default function OrderTimeline({
     );
   }
 
+  // Which vocabulary this order speaks. The steps themselves never change.
+  const labels = collection ? COLLECTION_STATUS_LABELS : BUYER_STATUS_LABELS;
+  const headlines = collection ? COLLECTION_HEADLINES : HEADLINES;
+
   const currentIndex = STEPS.findIndex(([key]) => key === status);
 
   /*
@@ -101,12 +143,26 @@ export default function OrderTimeline({
   // matter is not much of a promise.
   const when = () => {
     if (status === 'delivered') {
+      if (collection) {
+        return deliveredAt && formatWhen
+          ? `Collected on ${formatWhen(deliveredAt)}.`
+          : 'Collected.';
+      }
+
       return deliveredAt && formatWhen
         ? `Delivered on ${formatWhen(deliveredAt)}.`
         : 'Delivered.';
     }
 
     if (!estimate) return null;
+
+    /*
+     * A collection estimate is already a sentence about when the goat is ready
+     * -- "Ready at the time you choose". Wrapping it in the delivery template
+     * produced "Usually arrives within Ready at the time you choose of
+     * dispatch", so it is shown as it was written.
+     */
+    if (collection) return estimate;
 
     return status === 'out_for_delivery'
       ? `On its way — usually arrives within ${estimate}.`
@@ -123,7 +179,7 @@ export default function OrderTimeline({
         </span>
 
         <div className="min-w-0">
-          <h2 className="tracker__title">{HEADLINES[status] || BUYER_STATUS_LABELS[status] || status}</h2>
+          <h2 className="tracker__title">{headlines[status] || labels[status] || status}</h2>
 
           {arrival && (
             <p className="tracker__lead">
@@ -135,7 +191,10 @@ export default function OrderTimeline({
       </div>
 
       <ol className="tracker" aria-label="Order progress">
-        {STEPS.map(([key, label, icon], index) => {
+        {STEPS.map(([key, deliveryLabel, deliveryIcon], index) => {
+          const label = labels[key] || deliveryLabel;
+          const icon = (collection && COLLECTION_ICONS[key]) || deliveryIcon;
+
           const done = index <= currentIndex;
           const current = index === currentIndex;
           const at = reachedAt(key);

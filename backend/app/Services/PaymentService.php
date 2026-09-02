@@ -2,10 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Order;
+use App\Contracts\Payable;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
-use App\Models\Setting;
 use App\Models\User;
 use App\Notifications\PaymentReceivedNotification;
 use App\Notifications\PaymentSubmittedNotification;
@@ -19,29 +18,36 @@ use Illuminate\Validation\ValidationException;
 /**
  * Everything that happens to money coming in.
  *
- * The order's `paid_amount` and `payment_status` are never written by hand
+ * The subject's `paid_amount` and `payment_status` are never written by hand
  * anywhere else — they are derived from the confirmed rows in the ledger, so
  * the two can never drift apart.
+ *
+ * It used to take an Order. It now takes a Payable, which is either an order of
+ * goats or a room booked for some nights, and the change was almost entirely a
+ * change of nouns: a claim is still a claim, an advance is still an advance,
+ * and a refund is still a row pointing the other way. What genuinely differs
+ * between the two -- what a payment unlocks, what "already settled" means -- is
+ * asked of the subject rather than decided here. See App\Contracts\Payable.
  */
 class PaymentService
 {
     /**
      * A customer telling us they have sent money.
      *
-     * It is a claim, not a receipt: nothing moves on the order until staff
-     * confirm it against the account.
+     * It is a claim, not a receipt: nothing moves on the order or the booking
+     * until staff confirm it against the account.
      */
-    public function claim(Order $order, User $payer, array $data): Payment
+    public function claim(Payable $subject, User $payer, array $data): Payment
     {
-        if ($order->status === 'cancelled') {
+        if ($subject->isCancelled()) {
             throw ValidationException::withMessages([
-                'amount' => ['This order has been cancelled.'],
+                'amount' => [$subject->cancelledMessage()],
             ]);
         }
 
-        if ($order->isFullyPaid()) {
+        if ($subject->isFullyPaid()) {
             throw ValidationException::withMessages([
-                'amount' => ['This order is already paid in full.'],
+                'amount' => [$subject->settledMessage()],
             ]);
         }
 
@@ -49,10 +55,10 @@ class PaymentService
         // outstanding, but a hidden form is not a guard — without this, a
         // double submit or a stale tab files the same payment twice and staff
         // have to work out which of two identical rows is real.
-        if ($order->payments()->where('status', 'pending')->exists()) {
+        if ($subject->payments()->where('status', 'pending')->exists()) {
             throw ValidationException::withMessages([
-                'amount' => ['You have already told us about a payment on this order. '
-                    .'We will confirm it shortly.'],
+                'amount' => ['You have already told us about a payment on this '
+                    .$subject->paymentSubjectNoun().'. We will confirm it shortly.'],
             ]);
         }
 
@@ -74,11 +80,12 @@ class PaymentService
         if ($method->isGateway()) {
             throw ValidationException::withMessages([
                 'method' => [$method->name.' payments are confirmed automatically. '
-                    .'Use the pay button on your order, and contact us if it does not go through.'],
+                    .'Use the pay button on your '.$subject->paymentSubjectNoun()
+                    .', and contact us if it does not go through.'],
             ]);
         }
 
-        $payment = $this->create($order, [
+        $payment = $this->create($subject, [
             'user_id'               => $payer->id,
             'method'                => $method->code,
             'amount'                => $data['amount'],
@@ -106,11 +113,11 @@ class PaymentService
      * already visible on the statement. Confirmed on the spot, because the
      * person recording it is the person who checked it.
      */
-    public function record(Order $order, array $data, ?User $by = null): Payment
+    public function record(Payable $subject, array $data, ?User $by = null): Payment
     {
-        $payment = $this->create($order, [
-            'user_id'               => $order->user_id,
-            'method'                => $data['method'] ?? $order->payment_method,
+        $payment = $this->create($subject, [
+            'user_id'               => $subject->payer()?->getKey(),
+            'method'                => $data['method'] ?? $subject->defaultPaymentMethod(),
             'amount'                => $data['amount'],
             'type'                  => $data['type'] ?? 'payment',
             'status'                => 'confirmed',
@@ -123,42 +130,41 @@ class PaymentService
             'created_by'            => $by?->id,
         ]);
 
-        $this->sync($order->fresh());
+        $this->sync($subject->fresh());
 
         return $payment;
     }
 
     /**
-     * A buyer asking for money the order no longer needs.
+     * A buyer asking for money the order or the booking no longer needs.
      *
-     * Either the order was cancelled, or it came in lighter than ordered and
-     * re-priced below what was already paid.
+     * Either it was cancelled, or it was re-priced below what had already been
+     * paid -- a goat that came in lighter than ordered, a stay cut short.
      *
      * Filed as a refund row sitting at `pending`: nothing leaves the ledger
      * until staff have actually sent the money and said so, exactly as a
      * payment claim proves nothing until it is checked.
      */
-    public function requestRefund(Order $order, User $payer, array $data): Payment
+    public function requestRefund(Payable $subject, User $payer, array $data): Payment
     {
-        // Two ways an order can owe money back: it was cancelled, or it was
-        // re-priced downwards at the door after the buyer had already paid.
-        if (! $order->isRefundable()) {
+        if (! $subject->isRefundable()) {
             throw ValidationException::withMessages([
-                'refund' => ['There is nothing to refund on this order.'],
+                'refund' => ['There is nothing to refund on this '
+                    .$subject->paymentSubjectNoun().'.'],
             ]);
         }
 
-        if ($order->payments()->refunds()->where('status', 'pending')->exists()) {
+        if ($subject->payments()->refunds()->where('status', 'pending')->exists()) {
             throw ValidationException::withMessages([
-                'refund' => ['You have already asked for a refund on this order. '
-                    .'We are working on it.'],
+                'refund' => ['You have already asked for a refund on this '
+                    .$subject->paymentSubjectNoun().'. We are working on it.'],
             ]);
         }
 
-        $payment = $this->create($order, [
+        $payment = $this->create($subject, [
             'user_id'           => $payer->id,
-            'method'            => $data['method'] ?? $order->payment_method,
-            'amount'            => $order->refundable_amount,
+            'method'            => $data['method'] ?? $subject->defaultPaymentMethod(),
+            'amount'            => $subject->refundableAmount(),
             'type'              => 'refund',
             'status'            => 'pending',
             'source'            => 'customer',
@@ -191,13 +197,15 @@ class PaymentService
             'confirmed_by' => $by?->id,
         ]);
 
-        $order = $payment->order->fresh();
+        $subject = $payment->subject()?->fresh();
 
-        $this->sync($order, $payment);
+        if ($subject) {
+            $this->sync($subject, $payment);
+        }
 
         $payment = $payment->fresh();
 
-        $order->user?->notify($payment->isRefund()
+        $subject?->payer()?->notify($payment->isRefund()
             ? new RefundSentNotification($payment)
             : new PaymentReceivedNotification($payment));
 
@@ -214,35 +222,37 @@ class PaymentService
             'confirmed_by' => $by?->id,
         ]);
 
-        $this->sync($payment->order->fresh(), $payment);
+        if ($subject = $payment->subject()?->fresh()) {
+            $this->sync($subject, $payment);
+        }
 
         return $payment->fresh();
     }
 
     /**
-     * Re-derive the order's money columns from the ledger, then close the order
-     * if the last thing it was waiting for was the money.
-     */
-    /**
+     * Re-derive the money columns from the ledger, then let the subject move on
+     * to whatever that has just unlocked.
+     *
      * @param  Payment|null  $trigger  the payment that prompted this, when there was one
      */
-    public function sync(Order $order, ?Payment $trigger = null): Order
+    public function sync(Payable $subject, ?Payment $trigger = null): Payable
     {
         $paid = round((float) Payment::query()
-            ->where('order_id', $order->id)
+            ->where($subject->paymentForeignKey(), $subject->getKey())
             ->confirmed()
             ->get()
             ->sum(fn (Payment $payment) => $payment->signed_amount), 2);
 
-        $total = (float) $order->total;
+        $total = $subject->paymentTotal();
 
-        // Everything came back out again — the order was refunded, not unpaid.
-        $refunded = $paid <= 0 && Payment::where('order_id', $order->id)
+        // Everything came back out again — it was refunded, not unpaid.
+        $refunded = $paid <= 0 && Payment::query()
+            ->where($subject->paymentForeignKey(), $subject->getKey())
             ->confirmed()
             ->where('type', 'refund')
             ->exists();
 
-        $order->forceFill([
+        $subject->forceFill([
             'paid_amount'    => max($paid, 0),
             'payment_status' => match (true) {
                 $refunded              => 'refunded',
@@ -252,80 +262,15 @@ class PaymentService
             },
         ])->save();
 
-        return $this->advanceOnPayment($order->fresh(), $trigger);
+        return $subject->fresh()->settleAfterPayment($trigger);
     }
 
-    /**
-     * Move the order on to whatever the money has just unlocked.
-     *
-     * Confirming a payment is staff saying "this really arrived", which is the
-     * same act as confirming the order — so they should not then have to go and
-     * say it a second time in a different dropdown.
-     */
-    private function advanceOnPayment(Order $order, ?Payment $trigger = null): Order
-    {
-        // A refund is money leaving. Confirming one used to make the order look
-        // settled -- paid had just come down to meet the total -- and closed it
-        // as delivered on the strength of a payment going the other way.
-        if ($trigger?->isRefund()) {
-            return $order;
-        }
-
-        // What the buyer promised up front is in, so the order is no longer
-        // merely placed: it is committed, and the goat can be prepared. Only
-        // from 'pending' — anything further along has already been moved by
-        // staff or the seller, and this must never drag an order backwards.
-        if ($order->status === 'pending'
-            && (float) $order->paid_amount > 0
-            && ! $order->awaiting_advance
-        ) {
-            $order->update(['status' => 'confirmed']);
-
-            $order = $order->fresh();
-        }
-
-        return $this->closeIfSettled($order);
-    }
-
-    /**
-     * Money handed over at the door is evidence the goat got there.
-     *
-     * Only when the money was actually due at the door. An order paid in full
-     * up front settled long before the animal moved, so its balance says
-     * nothing about whether anything arrived -- a person has to say that, and
-     * the buyer has a button for it. Closing those on payment released the
-     * seller's earnings for a goat nobody had seen.
-     *
-     * Only from `out_for_delivery`, for the same reason: paying for a goat
-     * still standing on the farm does not deliver it.
-     */
-    private function closeIfSettled(Order $order): Order
-    {
-        if (! Setting::get('auto_deliver_on_payment', true)) {
-            return $order;
-        }
-
-        // Cash on delivery is collected at the handover, and the last slice of
-        // an advance is too. Anything else was paid before the journey began.
-        if (! in_array($order->payment_plan, ['on_delivery', 'advance'], true)) {
-            return $order;
-        }
-
-        if ($order->status !== 'out_for_delivery' || ! $order->isFullyPaid()) {
-            return $order;
-        }
-
-        $order->update(['status' => 'delivered']);
-
-        return $order->fresh();
-    }
-
-    private function create(Order $order, array $attributes): Payment
+    private function create(Payable $subject, array $attributes): Payment
     {
         return DB::transaction(fn () => Payment::create($attributes + [
             'reference' => $this->reference(),
-            'order_id'  => $order->id,
-            'currency'  => $order->currency,
+            $subject->paymentForeignKey() => $subject->getKey(),
+            'currency'  => $subject->paymentCurrency(),
         ]));
     }
 

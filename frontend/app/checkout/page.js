@@ -14,7 +14,7 @@ import { useCart } from '@/context/CartContext';
 import { useSettings } from '@/context/SiteContext';
 import { apiFetch } from '@/lib/api';
 import { isGatewayMethod, payThroughGateway } from '@/lib/gateway';
-import { formatMoney } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
 import { TRANSITION, stepPane } from '@/lib/motion';
 
 function CheckoutInner() {
@@ -30,6 +30,15 @@ function CheckoutInner() {
   const [placing, setPlacing] = useState(false);
   const [step, setStep] = useState(1);
   const [forward, setForward] = useState(true);
+
+  /*
+   * The collection slot, held as a day and an hour rather than one datetime.
+   * Two inputs is what a person picking a time actually does, and keeping them
+   * apart means a half-answered slot -- a date with no time yet -- stays
+   * half-answered instead of collapsing into a wrong moment.
+   */
+  const [pickupDate, setPickupDate] = useState('');
+  const [pickupTime, setPickupTime] = useState('');
 
   const [form, setForm] = useState({
     customer_name: '',
@@ -216,8 +225,18 @@ function CheckoutInner() {
   const STEP_OF_FIELD = {
     customer_name: 1, customer_phone: 1, customer_email: 1, address_line: 1,
     area: 1, city: 1, postal_code: 1, order_notes: 1, delivery_zone_id: 1,
-    save_address: 1, payment_method: 2, payment_plan: 2,
+    save_address: 1, pickup_at: 1, payment_method: 2, payment_plan: 2,
   };
+
+  /*
+   * Collection rewrites what this step is even asking. There is no address to
+   * check, and there is an appointment that has to be kept -- so the required
+   * fields follow the chosen zone rather than being fixed.
+   */
+  const isPickup = Boolean(selectedZone?.is_pickup);
+
+  // A slot is only a slot once both halves are answered.
+  const pickupAt = pickupDate && pickupTime ? `${pickupDate}T${pickupTime}` : '';
 
   const REQUIRED_ON_DELIVERY = {
     customer_name: 'Please tell us who is receiving the goat.',
@@ -234,12 +253,45 @@ function CheckoutInner() {
     const found = {};
 
     if (which === 1) {
+      // The address questions are not asked when the buyer is collecting, so
+      // they cannot be answered, so they must not be demanded.
+      const ADDRESS_FIELDS = ['address_line', 'city', 'area', 'postal_code'];
+
       Object.entries(REQUIRED_ON_DELIVERY).forEach(([key, message]) => {
+        if (isPickup && ADDRESS_FIELDS.includes(key)) return;
         if (!String(form[key] || '').trim()) found[key] = [message];
       });
 
       if (!form.delivery_zone_id) {
         found.delivery_zone_id = ['Choose where the goat is going.'];
+      }
+
+      /*
+       * The same window the server enforces, checked here so a buyer learns
+       * about it while looking at the field rather than after a rejected
+       * order. A date input lets you type straight past its own min and max,
+       * which is how a December date reached the server at all -- and the
+       * refusal that came back talked about times, not dates.
+       *
+       * Read from the API rather than restated, so the two cannot drift.
+       */
+      if (isPickup) {
+        const bookable = options?.pickup;
+
+        if (!pickupDate || !pickupTime) {
+          found.pickup_at = ['Pick the day and time you will come for the goat.'];
+        } else if (bookable && pickupDate < bookable.earliest_date) {
+          found.pickup_at = [
+            `We need time to have the goat ready, so the earliest is ${formatDate(bookable.earliest_date)}.`,
+          ];
+        } else if (bookable && pickupDate > bookable.latest_date) {
+          found.pickup_at = [
+            `We are only taking collections up to ${formatDate(bookable.latest_date)} for now. `
+            + 'Call us to arrange a later date.',
+          ];
+        } else if (bookable && !bookable.slots?.includes(pickupTime)) {
+          found.pickup_at = ['Please choose one of the times on the list.'];
+        }
       }
     }
 
@@ -292,6 +344,9 @@ function CheckoutInner() {
           ...form,
           payment_method: selectedMethod?.code || form.payment_method,
           payment_plan: paymentPlan,
+          // Sent only for collection. On a delivery this stays null, which is
+          // what tells every screen afterwards that a van is involved.
+          pickup_at: isPickup ? pickupAt : null,
           // What the summary showed is exactly what gets ordered. Sent as cart
           // lines, not goats, so one weight of a listing can be bought without
           // the buyer's other weight of it coming too.
@@ -466,6 +521,16 @@ function CheckoutInner() {
                       orderTotal={orderTotal}
                       paymentPlan={paymentPlan}
                       step={step}
+                      pickupDate={pickupDate}
+                      pickupTime={pickupTime}
+                      onPickupDate={(event) => {
+                        setPickupDate(event.target.value);
+                        setErrors((current) => ({ ...current, pickup_at: undefined }));
+                      }}
+                      onPickupTime={(event) => {
+                        setPickupTime(event.target.value);
+                        setErrors((current) => ({ ...current, pickup_at: undefined }));
+                      }}
                     />
                   )}
                 </m.div>

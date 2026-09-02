@@ -8,7 +8,7 @@ export async function generateMetadata() {
 
 async function getSections() {
   try {
-    const response = await apiFetch('/home', { revalidate: 60 });
+    const response = await apiFetch('/home', { revalidate: 60, tags: ['goats'] });
     return response.data || [];
   } catch (error) {
     console.error('Could not load homepage sections:', error.message);

@@ -57,18 +57,21 @@ class KhaltiGateway implements PaymentGateway
 
     public function start(Payment $payment): array
     {
-        $order = $payment->order;
+        // Whatever the money is for -- an order of goats, or a booked room.
+        // Reaching straight for ->order here was a fatal on the second of those.
+        $subject = $payment->subject();
 
         $response = $this->request()->post($this->baseUrl().'/epayment/initiate/', [
             'return_url' => route('api.v1.payments.return', ['gateway' => 'khalti']),
             'website_url' => rtrim(config('app.frontend_url'), '/'),
             'amount' => self::toPaisa((float) $payment->amount),
             'purchase_order_id' => $payment->gateway_ref,
-            'purchase_order_name' => 'Order '.$order->order_number,
+            'purchase_order_name' => ucfirst($subject->paymentSubjectNoun())
+                .' '.$subject->paymentReference(),
             'customer_info' => array_filter([
-                'name' => $order->customer_name,
-                'email' => $order->customer_email,
-                'phone' => $order->customer_phone,
+                'name' => $subject->payerName(),
+                'email' => $subject->payerEmail(),
+                'phone' => $subject->payerPhone(),
             ]),
         ]);
 

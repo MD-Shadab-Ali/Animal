@@ -34,6 +34,8 @@ class AdminFormsTest extends TestCase
             'post-categories'  => \App\Models\PostCategory::class,
             'delivery-zones'   => \App\Models\DeliveryZone::class,
             'payment-methods'  => \App\Models\PaymentMethod::class,
+            'rooms'            => \App\Models\Room::class,
+            'bookings'         => \App\Models\Booking::class,
         ];
 
         $failures = [];

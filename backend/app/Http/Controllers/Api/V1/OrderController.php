@@ -155,6 +155,55 @@ class OrderController extends Controller
         ]);
     }
 
+    /**
+     * The buyer saying they have set off for the farm.
+     *
+     * Only they know this. On a collection there is no driver to report it, and
+     * staff marking it would be guessing at somebody else's afternoon -- which
+     * is why this step is the buyer's to set and not ours.
+     *
+     * It moves the order to the same status a delivery reaches when it leaves
+     * with a driver, so nothing downstream has to learn a new state; only the
+     * words the buyer is shown differ.
+     */
+    public function onMyWay(Request $request, string $orderNumber): JsonResponse
+    {
+        $order = Order::where('user_id', $request->user()->id)
+            ->where('order_number', $orderNumber)
+            ->firstOrFail();
+
+        // Tapped twice, or tapped after staff got there first.
+        if (in_array($order->status, ['out_for_delivery', 'delivered'], true)) {
+            return response()->json([
+                'message' => 'Thanks — we know you are on your way.',
+                'data' => new OrderResource($order->load(['items.goatWeight'])),
+            ]);
+        }
+
+        if (blank($order->pickup_at)) {
+            return response()->json([
+                'message' => 'This order is being delivered to you, so there is nothing to collect.',
+            ], 422);
+        }
+
+        // Ascending only: the goat has to be ready before anybody sets off for
+        // it, and skipping the step would leave the history saying nothing
+        // about when it was prepared.
+        if ($order->status !== 'processing') {
+            return response()->json([
+                'message' => 'This order is not ready to collect yet. We will let you know.',
+            ], 422);
+        }
+
+        $order->statusNote = 'Buyer is on the way to collect.';
+        $order->update(['status' => 'out_for_delivery']);
+
+        return response()->json([
+            'message' => 'Thanks — we will have the goat penned and ready.',
+            'data' => new OrderResource($order->fresh()->load(['items.goatWeight'])),
+        ]);
+    }
+
     public function cancel(Request $request, string $orderNumber): JsonResponse
     {
         $order = Order::where('user_id', $request->user()->id)
