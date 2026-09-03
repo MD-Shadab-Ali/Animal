@@ -48,6 +48,15 @@ in Filament. The frontend fetches:
 | `delivery_zones` | Admin-defined regions with their own shipping charge. |
 | `payment_methods` | COD seeded; admin toggles availability. |
 
+### Homestay
+| Table | Purpose |
+|---|---|
+| `rooms` | A room let at the farm: type, how many it sleeps, per-night price, extra-guest fee, min/max nights. |
+| `room_images` | Photo gallery per room. |
+| `bookings` | Stay header: dates, guests, nights, totals, payment plan and what has been paid. |
+| `booking_nights` | One row per night held, which is what makes a date unavailable to anyone else. |
+| `booking_status_histories` | Audit trail of every status change, same shape as orders. |
+
 ### Customers
 | Table | Purpose |
 |---|---|
@@ -75,6 +84,23 @@ in Filament. The frontend fetches:
 with `cancelled` reachable from any pre-delivery state. Statuses and their
 colours are configurable; every transition is written to
 `order_status_histories` with the acting user and an optional note.
+
+## Booking lifecycle
+`placed → confirmed → checked_in → checked_out`
+with `cancelled` reachable from any state before check-out. Every transition is
+written to `booking_status_histories`, the same way orders are.
+
+Two things move a booking without staff touching it. Paying the balance in full
+on the day of arrival checks the guest straight in, if the
+`auto_check_in_on_payment` setting is on. Anything settled while that was switched
+off is swept up by `bookings:check-in-arrivals`, which runs daily at 01:00 and
+needs a cron entry calling `schedule:run` (see the README).
+
+Availability is held in `booking_nights` rather than computed from date ranges:
+one row per night, so a night is either taken or it is not. The database enforces
+it — `booking_nights_room_id_night_unique` is a unique index on
+`(room_id, night)` — so two people racing for the same night end with one insert
+and one rejection, not two bookings.
 
 ## Auth flow
 1. Customer registers → `POST /api/v1/auth/register` → Sanctum token.

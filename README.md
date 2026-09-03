@@ -110,6 +110,29 @@ QUEUE_CONNECTION=database
 php artisan queue:work
 ```
 
+### Scheduled work
+
+Some things are not triggered by a request. Paying a booking in full checks the guest
+in on the spot, but a stay settled while automatic check-in was switched off would
+otherwise sit on "confirmed" forever, so a daily command sweeps those up:
+
+| Command | When | What it does |
+|---|---|---|
+| `bookings:check-in-arrivals` | Daily, 01:00 | Checks in any booking that is paid in full but still confirmed |
+
+Laravel runs these from a single cron entry. Without it the command never fires and
+nothing tells you so — the bookings just stay where they are:
+
+```bash
+* * * * * cd /path/to/backend && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Run it by hand any time:
+
+```bash
+php artisan bookings:check-in-arrivals
+```
+
 ---
 
 ## What the admin can change
@@ -128,6 +151,9 @@ Every item below is editable in Filament with no code change.
 | **Catalog → Categories** | Nested categories with images and descriptions |
 | **Sales → Orders** | Order status with a full audit trail, payment status, internal notes |
 | **Sales → Coupons** | Percentage or fixed discounts with caps, date windows and usage limits |
+| **Homestay → Rooms** | Rooms let at the farm: name, type, sleeps, per-night price, extra-guest fee, minimum and maximum nights, photos, description |
+| **Homestay → Bookings** | Stays with their status history, nights, guests, and what has been paid against what is owed |
+| **Configuration → Homestay settings** | Whether rooms are offered at all, the rooms-page intro, check-in and check-out times, days of notice needed, how far ahead a room can be booked, house rules, cancellation note, and whether settling the balance checks the guest in |
 | **Configuration → Delivery zones** | Zone names, charges, free-delivery thresholds, estimated times |
 | **Configuration → Payment methods** | Enable or disable methods; COD ships enabled, bKash and bank transfer are seeded but off |
 | **Blog** | Care guides with categories |
@@ -177,7 +203,7 @@ cd backend
 php artisan test
 ```
 
-15 tests / 112 assertions covering:
+440 tests / 2381 assertions covering:
 
 - every admin screen renders, and customers are refused entry to the panel
 - all public API endpoints and their shapes
@@ -185,6 +211,7 @@ php artisan test
 - the full purchase journey: cart → checkout → order → stock decrement → history
 - cancelling an order restocking the goat
 - coupon discounts, shop filters, and the contact form reaching the inbox
+- booking a room: availability, nights and guest pricing, check-in, and cancellation
 
 Frontend:
 
@@ -257,6 +284,25 @@ forms 6 a minute, checkout 10 a minute, and everything else 90 a minute.
 | PUT | `/seller/payout-details` | Save where their earnings should be sent |
 | POST | `/seller/payouts` | Request the balance they are owed |
 | GET | `/sellers`, `/sellers/{slug}` | Public seller directory and profile |
+
+**Homestay**
+
+Browsing rooms needs no account. Holding one does — a room is booked in
+somebody's name.
+
+| Method | Endpoint | Auth | Purpose |
+|---|---|---|---|
+| GET | `/rooms` | — | Rooms available, filtered by `check_in`, `check_out` and `guests` |
+| GET | `/rooms/options` | — | Earliest and latest bookable dates, and the guest range to offer |
+| GET | `/rooms/{slug}` | — | One room: pricing, capacity, photos, house rules |
+| GET | `/rooms/{slug}/availability` | — | Which nights are already taken |
+| POST | `/rooms/{slug}/bookings` | Bearer | Hold the room for those nights |
+| GET | `/bookings` | Bearer | The customer's own stays |
+| GET | `/bookings/{number}` | Bearer | One stay with its status history |
+| POST | `/bookings/{number}/cancel` | Bearer | Cancel a stay that has not been checked out |
+| POST | `/bookings/{number}/payments` | Bearer | Tell us you have paid, with a reference and a receipt |
+| POST | `/bookings/{number}/pay/{gateway}` | Bearer | Start an online payment through eSewa or Khalti |
+| POST | `/bookings/{number}/refunds` | Bearer | Ask for money back on a cancelled stay |
 
 ---
 
