@@ -652,6 +652,10 @@ account before confirming."
 | Listing status | `draft`, `published`, `sold`, `archived` | `sold` set automatically at zero stock; restored on cancel |
 | Seller | `pending`, `approved`, `suspended`, `rejected` | Only `approved` may list; anything else pulls the catalogue |
 | Payout | `pending`, `processing`, `paid`, `failed` | `failed` releases the earnings back to unpaid |
+| Booking status | `placed`, `confirmed`, `checked_in`, `checked_out`, `cancelled` | Forward-only along `FLOW`; `cancelled` from anything before check-out; paying the advance confirms; settling the balance on the arrival day checks in by itself; `checked_out` requires fully paid |
+| Booking nights | held / free | One row per night in `booking_nights`, from the arrival day up to but **not** including the departure day, so back-to-back stays are legal. Cancelling frees them; checking out does not |
+
+Bookings are run day to day from [HOMESTAY-HOWTO.md](HOMESTAY-HOWTO.md).
 
 ---
 

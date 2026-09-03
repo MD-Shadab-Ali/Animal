@@ -27,6 +27,18 @@ Verified by 18 tests / 124 assertions (`php artisan test`).
 | `delivery_zones` | Charge, free-delivery threshold, estimated time |
 | `payment_methods` | Code, instructions, logo, active flag, `config` JSON for gateway keys, advance-payment fields |
 
+### Homestay
+| Table | Notes |
+|---|---|
+| `rooms` | Type, sleeps, price per night, extra-guest fee, min/max nights, published flag |
+| `room_images` | Gallery per room, first one is the card image |
+| `bookings` | Dates, guests, nights, totals, payment plan, paid-to-date, status |
+| `booking_nights` | One row per night held. Unique on `(room_id, night)`, which is what actually prevents a double booking |
+| `booking_status_histories` | Same audit shape as `order_status_histories` |
+
+Day-to-day operation is in [HOMESTAY-HOWTO.md](HOMESTAY-HOWTO.md); the flow end to
+end is in [HOMESTAY-TUTORIAL.md](HOMESTAY-TUTORIAL.md).
+
 ### Customers
 `users` (admins and customers share the table, split by `role`), `addresses` (one default enforced by a model hook), `wishlists`, `reviews` (admin-moderated).
 

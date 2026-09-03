@@ -629,7 +629,10 @@ Animal Marketplace/
 │   ├── context/               Auth, Cart, Site
 │   └── lib/                   API client, settings, formatting
 └── docs/
-    ├── ARCHITECTURE.md        Stack, schema, order lifecycle
+    ├── ARCHITECTURE.md        Stack, schema, order and booking lifecycles
     ├── BACKEND-STATUS.md      What is built, what is not
-    └── ADMIN-PANEL-FLOW.md    Admin panel screen by screen, and the buyer/seller flows
+    ├── ADMIN-PANEL-FLOW.md    Admin panel screen by screen, and the buyer/seller flows
+    ├── HOMESTAY-TUTORIAL.md   Take a stay from empty to checked out, start to finish
+    └── HOMESTAY-HOWTO.md      Running the rooms: opening one, booking windows, refunds,
+                               and bookings stuck on Confirmed
 ```
