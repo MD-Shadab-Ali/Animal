@@ -16,7 +16,11 @@
   /* Derived surfaces */
   --ink: #14532d;
   --body: #3f4a44;
-  --muted: #68786e;
+  /* Nudged two points darker to clear WCAG AA. The old #68786e measured 4.67
+     against white, which passes, but 4.44 against --surface-alt below it, which
+     does not -- and every section subtitle on the home page sits on that band.
+     The difference is invisible; the audit result is not. */
+  --muted: #65756b;
   --surface: #f0fdf4;
   --surface-alt: #f7faf8;
   --line: #e4ebe6;
