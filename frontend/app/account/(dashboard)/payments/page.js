@@ -113,14 +113,36 @@ export default function PaymentsPage() {
 
                     <td>
                       {/* The whole point of a ledger row: one click back to
-                          what the money was actually for. */}
-                      {row.order_number ? (
+                          what the money was actually for -- which is a goat
+                          order for some of these and a room for others, so the
+                          link follows the money rather than assuming. */}
+                      {row.order_number && (
                         <Link href={`/account/orders/${row.order_number}`} className="fw-semibold text-body">
                           {row.order_number}
                         </Link>
-                      ) : <span className="text-soft">—</span>}
+                      )}
 
-                      {row.goats && <div className="small text-soft">{row.goats}</div>}
+                      {row.booking_number && (
+                        <Link href={`/account/bookings/${row.booking_number}`} className="fw-semibold text-body">
+                          {row.booking_number}
+                        </Link>
+                      )}
+
+                      {!row.order_number && !row.booking_number && <span className="text-soft">—</span>}
+
+                      {/* Gated on there being an order: goats_summary answers
+                          "—" for a stay, and a dash under a room name reads as
+                          something having failed to load. */}
+                      {row.order_number && row.goats && (
+                        <div className="small text-soft">{row.goats}</div>
+                      )}
+
+                      {row.stay && (
+                        <div className="small text-soft">
+                          <i className="bi bi-house-door me-1" aria-hidden="true" />
+                          {row.stay}
+                        </div>
+                      )}
                     </td>
 
                     <td>

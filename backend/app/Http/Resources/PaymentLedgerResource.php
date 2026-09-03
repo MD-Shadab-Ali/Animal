@@ -29,6 +29,15 @@ class PaymentLedgerResource extends JsonResource
             // Already written for a table cell: one goat, or the first and a
             // count of the rest.
             'goats' => $this->goats_summary,
+
+            /*
+             * A ledger row has to say what the money was for, and a payment for
+             * a room has no order to name. Without these a stay would show up
+             * as a dash with a figure beside it -- worse than the row being
+             * missing, because it reads as a payment for nothing.
+             */
+            'booking_number' => $this->booking?->booking_number,
+            'stay' => $this->booking?->room?->name,
             'type' => $this->type,
             'type_label' => Payment::TYPES[$this->type] ?? $this->type,
             'method' => $this->method,
