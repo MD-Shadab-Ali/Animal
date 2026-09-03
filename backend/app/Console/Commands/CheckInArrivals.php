@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Booking;
 use App\Models\Setting;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Catch any paid-up booking that never got checked in.
@@ -48,17 +49,51 @@ class CheckInArrivals extends Command
             ->get()
             ->filter(fn (Booking $booking) => $booking->isFullyPaid());
 
+        $moved = 0;
+
         foreach ($due as $booking) {
-            // Said on the history row, so nobody reads this as a member of
-            // staff having walked somebody to their room.
-            $booking->statusNote = 'Checked in automatically — paid in full';
+            /*
+             * The status above was read for the whole batch at once, so by the
+             * time this row comes round somebody may have moved it. Staff
+             * cancelling a stay at one in the morning is unlikely, but writing
+             * over it would put a cancelled booking back in the house and the
+             * guest would never know.
+             *
+             * Re-read the row under a lock and only move it if it is still
+             * where the query found it. It goes through the model rather than
+             * the query builder because the observer writes the history row on
+             * save, and a builder update would move the stay with nothing
+             * saying why.
+             */
+            $checked = DB::transaction(function () use ($booking) {
+                $fresh = Booking::query()
+                    ->whereKey($booking->getKey())
+                    ->lockForUpdate()
+                    ->first();
 
-            $booking->update(['status' => 'checked_in']);
+                if (! $fresh || $fresh->status !== 'confirmed' || ! $fresh->isFullyPaid()) {
+                    return null;
+                }
 
-            $this->line("  {$booking->booking_number} — {$booking->room_name} — {$booking->guest_name}");
+                // Said on the history row, so nobody reads this as a member of
+                // staff having walked somebody to their room.
+                $fresh->statusNote = 'Checked in automatically — paid in full';
+
+                $fresh->update(['status' => 'checked_in']);
+
+                return $fresh;
+            });
+
+            if (! $checked) {
+                continue;
+            }
+
+            $moved++;
+
+            $this->line("  {$checked->booking_number} — {$checked->room_name} — {$checked->guest_name}");
         }
 
-        $this->info($due->count().' booking(s) checked in.');
+        $this->info($moved.' booking(s) checked in.');
 
         return self::SUCCESS;
     }
