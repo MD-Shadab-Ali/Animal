@@ -51,6 +51,25 @@ export default async function HomestayPage({ searchParams }) {
 
   const hasDates = Boolean(dates.check_in && dates.check_out);
 
+  /*
+   * Two dates only describe nights if the second one is after the first.
+   *
+   * The filter itself will not let you pick otherwise, but the URL is not the
+   * filter: a shared link, a stale bookmark or a hand-edited query can carry
+   * any pair at all. The server ignores a backwards range and answers with
+   * every room, and the count below would then say those rooms were
+   * "available on those nights" for a stay nobody could take. Say plainly how
+   * many rooms there are instead, and keep the dates in the form so they can
+   * be corrected. ISO dates compare correctly as strings.
+   *
+   * A range that has already been and gone fails for the same reason: last
+   * January is in order and still not a stay you can book. `earliest_date` is
+   * the same floor the date fields are given, so the two agree.
+   */
+  const hasNights = hasDates
+    && dates.check_out > dates.check_in
+    && (!homestay.earliest_date || dates.check_in >= homestay.earliest_date);
+
   return (
     <>
       <div className="pagehead">
@@ -94,7 +113,7 @@ export default async function HomestayPage({ searchParams }) {
             */}
             <p className="text-soft small mb-0">
               <strong className="text-ink">{total}</strong> room{total === 1 ? '' : 's'}
-              {hasDates ? ' available on those nights' : ' available'}
+              {hasNights ? ' available on those nights' : ' available'}
             </p>
 
             {hasDates && (
@@ -108,10 +127,10 @@ export default async function HomestayPage({ searchParams }) {
             <div className="panel text-center py-5">
               <i className="bi bi-calendar-x d-block mb-2" style={{ fontSize: '2rem' }} aria-hidden="true" />
               <h2 className="h5 mb-1">
-                {hasDates ? 'No rooms available on those nights' : 'No rooms just now'}
+                {hasNights ? 'No rooms available on those nights' : 'No rooms just now'}
               </h2>
               <p className="text-soft small mb-0">
-                {hasDates
+                {hasNights
                   ? 'Try a different date, or a shorter stay.'
                   : 'Please check back, or call us to ask.'}
               </p>
