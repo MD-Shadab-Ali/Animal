@@ -31,6 +31,10 @@ export default function BookingPayment({ booking, onDone }) {
   const method = booking.payment.method;
   const dueNow = booking.totals.due_now;
 
+  // Still only "Booked": this payment is what will confirm it, so the panel
+  // says so rather than talking about money in the abstract.
+  const notConfirmed = booking.status === 'placed';
+
   // Nothing left to collect, or the stay is off.
   if (booking.payment.is_fully_paid || booking.status === 'cancelled') return null;
 
@@ -96,33 +100,71 @@ export default function BookingPayment({ booking, onDone }) {
 
   return (
     <div className="panel">
+      {/*
+        Named for what it does to the booking, not for what it does to money.
+        While a stay is still `placed` this is the one action that confirms it,
+        and "Pay for your stay" never said so -- a guest looking at a timeline
+        stuck on Booked had nothing telling them this was the way forward.
+      */}
       <h2 className="h6 mb-1">
-        {booking.payment.awaiting_advance ? 'Pay the advance' : 'Pay for your stay'}
+        {notConfirmed
+          ? 'Confirm your booking'
+          : (booking.payment.awaiting_advance ? 'Pay the advance' : 'Pay for your stay')}
       </h2>
 
       <p className="text-soft small mb-3">
-        {booking.payment.awaiting_advance
-          ? `${formatMoney(dueNow, settings)} now holds the room. The rest is due when you arrive.`
-          : `${formatMoney(dueNow, settings)} outstanding.`}
+        {notConfirmed
+          ? `Paying ${formatMoney(dueNow, settings)} confirms your booking${
+            booking.payment.awaiting_advance ? '. The rest is due when you arrive.' : '.'}`
+          : (booking.payment.awaiting_advance
+            ? `${formatMoney(dueNow, settings)} now holds the room. The rest is due when you arrive.`
+            : `${formatMoney(dueNow, settings)} outstanding.`)}
       </p>
 
       {isGatewayMethod(method) ? (
         <button type="button" className="btn btn-brand w-100" onClick={throughGateway} disabled={busy}>
-          {busy ? 'Opening…' : `Pay ${formatMoney(dueNow, settings)}`}
+          {busy
+            ? 'Opening…'
+            : `${notConfirmed ? 'Confirm and pay' : 'Pay'} ${formatMoney(dueNow, settings)}`}
         </button>
       ) : (
         <form onSubmit={claim}>
-          {/* Where to send it. Filled in by the farm in the admin, so this
-              panel never invents an account number. */}
-          {booking.payment.payee && (
-            <dl className="spec-list mb-3">
-              {Object.entries(booking.payment.payee).map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label.replace(/_/g, ' ')}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
+          {/*
+            Where to send it, named field by field.
+
+            This used to walk Object.entries() over the payee block, which
+            worked right up until a method had a QR code: the value is a URL,
+            and a blind loop printed it as text -- a raw
+            http://…/storage/payment-methods/qr/01M0W…png spilling out of the
+            panel. Naming the fields is also what lets the account number carry
+            the weight, since it is the one somebody has to copy correctly.
+          */}
+          {booking.payment.payee?.account_number && (
+            <dl className="row mb-3 small">
+              {booking.payment.payee.bank_name && (
+                <>
+                  <dt className="col-5 fw-normal text-soft">Bank</dt>
+                  <dd className="col-7 mb-1">{booking.payment.payee.bank_name}</dd>
+                </>
+              )}
+              <dt className="col-5 fw-normal text-soft">Account name</dt>
+              <dd className="col-7 mb-1">{booking.payment.payee.account_name || '—'}</dd>
+              <dt className="col-5 fw-normal text-soft">Account number</dt>
+              <dd className="col-7 mb-0 fw-semibold text-ink">
+                {booking.payment.payee.account_number}
+              </dd>
             </dl>
+          )}
+
+          {booking.payment.payee?.qr && (
+            <div className="text-center mb-3">
+              <img
+                src={booking.payment.payee.qr}
+                alt="QR code for paying the farm"
+                style={{ maxWidth: 140 }}
+              />
+              <div className="text-soft" style={{ fontSize: '.75rem' }}>Scan to pay</div>
+            </div>
           )}
 
           <div className="mb-2">
@@ -155,8 +197,15 @@ export default function BookingPayment({ booking, onDone }) {
             {busy ? 'Sending…' : 'I have sent it'}
           </button>
 
+          {/*
+            A transfer is a claim, not a confirmation -- staff have to see it on
+            the statement first. So this button must not promise what the
+            gateway button can: it says what happens next, not that the booking
+            is now confirmed.
+          */}
           <p className="text-soft small mt-2 mb-0">
-            We will check it against the account and confirm your booking.
+            We will check it against the account and confirm your booking
+            {notConfirmed ? ' — usually the same day.' : '.'}
           </p>
         </form>
       )}

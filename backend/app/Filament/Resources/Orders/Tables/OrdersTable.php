@@ -113,31 +113,6 @@ class OrdersTable
     }
 
     /**
-     * Picking which goat actually walks out of the pen.
-     *
-     * The nearest animal to what the buyer asked for is chosen for staff, and
-     * the rest are listed either side of it so a heavier or lighter one can be
-     * taken instead -- the goat nearest on paper is not always the one you
-     * want to send. Nothing here touches the price: `weight_kg` remains what
-     * the buyer paid for, and the difference is settled at the delivery
-     * weigh-in, which is the one place that moves money.
-     */
-    /**
-     * Tie each line to the animal staff chose, and take those animals off the
-     * shelf.
-     *
-     * Deliberately silent about money: `weight_kg` stays what the buyer paid
-     * for, and a heavier or lighter animal is settled at the delivery weigh-in.
-     * Two places moving the price would be two places to get it wrong.
-     */
-    /**
-     * The picture of whichever animal is going out, if one has been taken.
-     *
-     * Referenced rather than copied: the animal's own record is where that
-     * photograph belongs, and two copies would drift apart the moment somebody
-     * replaced one of them.
-     */
-    /**
      * The animals picked in the form right now, in line order.
      *
      * Read from the form rather than the order because this runs while staff
@@ -211,6 +186,16 @@ class OrdersTable
             ->first();
     }
 
+    /**
+     * Tie each line to the animal staff chose, take it off the shelf, and
+     * re-price the order from what it actually weighs.
+     *
+     * This used to leave the money alone and wait for a scale at the door. A
+     * pooled animal has already been on a scale -- its weight column is that
+     * reading -- and on a collection order nobody ever drives anywhere to take
+     * a second one. So the order settled at the weight the buyer guessed at
+     * rather than the goat they were handed.
+     */
     private static function assignAnimals(Order $record, array $rows): void
     {
         foreach ($rows as $row) {
@@ -230,6 +215,39 @@ class OrdersTable
 
             $item->assignAnimal($animal);
         }
+
+        /*
+         * The bill follows the animal. Each line now carries the weight of the
+         * goat actually going out, so the order re-prices from it exactly as it
+         * would from a scale -- because that is what it is.
+         *
+         * Staff are told what it did to the money. Silently moving the total of
+         * an order somebody has already paid, and leaving them to find a
+         * balance at the gate, is how a farm ends up arguing with a buyer who
+         * was never told.
+         */
+        $record->load('items');
+        $adjustment = $record->applyWeightAdjustments();
+        $record->refresh();
+
+        if (abs($adjustment) < 0.01) {
+            return;
+        }
+
+        $symbol = Setting::currencySymbol();
+        $owed = round((float) $record->total - (float) $record->paid_amount, 2);
+
+        Notification::make()
+            ->title($adjustment > 0
+                ? 'Heavier than ordered — '.$symbol.number_format($adjustment, 2).' added to the total'
+                : 'Lighter than ordered — '.$symbol.number_format(abs($adjustment), 2).' came off the total')
+            ->body($owed > 0
+                ? 'Collect '.$symbol.number_format($owed, 2).' when they take the goat.'
+                : ($owed < 0
+                    ? $symbol.number_format(abs($owed), 2).' was overpaid and is owed back.'
+                    : 'Nothing further to collect.'))
+            ->warning()
+            ->send();
     }
 
     private static function animalSchema(): array
@@ -457,7 +475,9 @@ class OrdersTable
 
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state) => Order::STATUSES[$state] ?? $state)
+                    // Per order, so a collection reads "Ready to collect" where
+                    // a delivery reads "Out for delivery".
+                    ->formatStateUsing(fn (?string $state, Order $record) => $record->statusLabels()[$state] ?? $state)
                     ->color(fn (?string $state) => Order::STATUS_COLORS[$state] ?? 'gray')
                     ->sortable(),
 
@@ -526,7 +546,7 @@ class OrdersTable
                             // Every status is listed, so the whole run is
                             // visible and staff can see where an order sits in
                             // it. Only the reachable ones can be picked.
-                            ->options(Order::STATUSES)
+                            ->options(fn (Order $record) => $record->statusLabels())
                             ->disableOptionWhen(function (string $value, Order $record): bool {
                                 // Cancelling is not a step in the sequence: an
                                 // order can fall over at any point, so it stays

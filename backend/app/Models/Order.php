@@ -63,15 +63,30 @@ class Order extends Model implements Payable
      */
     public function buyerStatusLabel(): string
     {
-        if ($this->isPickup()) {
-            return match ($this->status) {
-                'out_for_delivery' => 'Ready to collect',
-                'delivered' => 'Collected',
-                default => self::STATUSES[$this->status] ?? $this->status,
-            };
+        return $this->statusLabels()[$this->status] ?? $this->status;
+    }
+
+    /**
+     * Every status, worded for this particular order.
+     *
+     * Staff were being offered "Out for delivery" and "Delivered" on an order
+     * where nothing is delivered and nobody drives anywhere -- the buyer is
+     * coming to the gate. The states themselves are the same either way; what
+     * they mean to the people reading them is not, so the words follow the
+     * order rather than being fixed to the column.
+     *
+     * @return array<string, string>
+     */
+    public function statusLabels(): array
+    {
+        if (! $this->isPickup()) {
+            return self::STATUSES;
         }
 
-        return self::STATUSES[$this->status] ?? $this->status;
+        return array_merge(self::STATUSES, [
+            'out_for_delivery' => 'Ready to collect',
+            'delivered' => 'Collected',
+        ]);
     }
 
     public const STATUSES = [

@@ -149,13 +149,18 @@ class AnimalAssignmentTest extends TestCase
     }
 
     /**
-     * Assignment is not a price change.
+     * The bill follows the animal that is actually going out.
      *
-     * A heavier animal costs more, but that is settled on the scale at
-     * delivery. Re-pricing here as well would mean two places moving the same
-     * number.
+     * This asserted the opposite until a real order showed why that was wrong:
+     * a buyer ordered 20 kg, paid for 20 kg, and staff set aside a 22.86 kg
+     * goat. The price was supposed to catch up at the delivery weigh-in -- but
+     * a pooled animal has already been weighed, and on a collection order
+     * nobody drives anywhere to weigh it again. The correction never came.
+     *
+     * What the buyer asked for stays on the line as `weight_kg`; the animal's
+     * own weight is what the money is worked out from.
      */
-    public function test_taking_a_heavier_animal_does_not_change_what_is_owed(): void
+    public function test_taking_a_heavier_animal_re_prices_the_order(): void
     {
         $order = $this->order([40, 44, 47], 45);
         $item = $order->items->first();
@@ -167,9 +172,42 @@ class AnimalAssignmentTest extends TestCase
 
         $item = $item->fresh();
 
-        $this->assertSame($before, (float) $order->fresh()->total);
-        $this->assertSame(45.0, (float) $item->weight_kg, 'what the buyer paid for is unchanged');
-        $this->assertNull($item->delivered_weight_kg, 'the scale has not spoken yet');
+        $this->assertGreaterThan($before, (float) $order->fresh()->total,
+            'a heavier goat costs more, and the order has to say so');
+        $this->assertSame(45.0, (float) $item->weight_kg, 'what the buyer asked for is unchanged');
+        $this->assertSame(47.0, (float) $item->delivered_weight_kg, 'what they are getting');
+    }
+
+    /** A lighter animal costs less, and leaves the order overpaid. */
+    public function test_taking_a_lighter_animal_takes_money_off(): void
+    {
+        $order = $this->order([40, 44, 47], 45);
+        $item = $order->items->first();
+        $before = (float) $order->total;
+
+        $this->moveToProcessing($order, [
+            ['item_id' => $item->id, 'animal_id' => $item->goat->weights->firstWhere('weight_kg', 40)->id],
+        ]);
+
+        $this->assertLessThan($before, (float) $order->fresh()->total);
+    }
+
+    /** Releasing the animal takes its weight off the line with it. */
+    public function test_releasing_the_animal_clears_the_weight(): void
+    {
+        $order = $this->order([40, 44, 47], 45);
+        $item = $order->items->first();
+
+        $this->moveToProcessing($order, [
+            ['item_id' => $item->id, 'animal_id' => $item->goat->weights->firstWhere('weight_kg', 47)->id],
+        ]);
+
+        $this->assertSame(47.0, (float) $item->fresh()->delivered_weight_kg);
+
+        $item->fresh()->assignAnimal(null);
+
+        $this->assertNull($item->fresh()->delivered_weight_kg);
+        $this->assertNull($item->fresh()->goat_weight_id);
     }
 
     /** Changing your mind must not strand the first goat as sold to nobody. */

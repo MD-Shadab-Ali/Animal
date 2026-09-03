@@ -26,7 +26,11 @@ class StatusHistoriesRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('to_status')
-            ->defaultSort('created_at', 'desc')
+            // By id, not created_at: two rows written inside the same second --
+            // a payment confirming a stay and then checking it in -- tie on the
+            // timestamp and order arbitrarily, which shows staff the sequence
+            // backwards.
+            ->defaultSort('id', 'desc')
             ->columns([
                 TextColumn::make('created_at')
                     ->label('When')

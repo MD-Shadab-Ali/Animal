@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\BookingNight;
 use App\Models\PaymentMethod;
 use App\Models\Room;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\BookingService;
 use App\Services\PaymentService;
@@ -464,10 +465,40 @@ class RoomBookingTest extends TestCase
         $this->assertSame('placed', $booking->fresh()->status);
     }
 
-    /** Money in never carries a booking further than held. */
-    public function test_paying_in_full_does_not_check_anybody_in(): void
+    /**
+     * Settling the balance checks the guest in.
+     *
+     * The advance plan promises "the rest on arrival", so the rest arriving
+     * says they have -- the same reasoning the order applies to cash handed to
+     * a rider at a door.
+     */
+    public function test_settling_the_balance_checks_the_guest_in(): void
     {
-        $booking = $this->book($this->day(0), $this->day(2));
+        $booking = $this->book($this->day(0), $this->day(2), plan: 'advance');
+
+        app(PaymentService::class)->record($booking, ['amount' => 1800]);
+        $this->assertSame('confirmed', $booking->fresh()->status);
+
+        app(PaymentService::class)->record($booking->fresh(), ['amount' => 4200]);
+
+        $booking = $booking->fresh();
+
+        $this->assertSame('checked_in', $booking->status);
+        $this->assertNotNull($booking->checked_in_at);
+    }
+
+    /**
+     * Paying up front holds the room and nothing more.
+     *
+     * What makes a final payment mean "the guest is here" is when it was due,
+     * not that it cleared the bill. A full plan is settled at the moment of
+     * booking, weeks before anybody sets off -- so it says nothing at all about
+     * arrival, and checking somebody in on it marks them present the instant
+     * they finish paying.
+     */
+    public function test_paying_in_full_up_front_does_not_check_anybody_in(): void
+    {
+        $booking = $this->book($this->day(0), $this->day(2), plan: 'full');
 
         app(PaymentService::class)->record($booking, ['amount' => 6000]);
 
@@ -475,6 +506,93 @@ class RoomBookingTest extends TestCase
 
         $this->assertSame('confirmed', $booking->status);
         $this->assertSame('paid', $booking->payment_status);
+        $this->assertTrue($booking->isFullyPaid());
+        $this->assertNull($booking->checked_in_at);
+    }
+
+    /** And the sweep leaves a full-plan booking alone for the same reason. */
+    public function test_the_command_leaves_a_full_plan_booking_alone(): void
+    {
+        $booking = $this->book($this->day(0), $this->day(2), plan: 'full');
+
+        app(PaymentService::class)->record($booking, ['amount' => 6000]);
+        $this->artisan('bookings:check-in-arrivals')->assertSuccessful();
+
+        $this->assertSame('confirmed', $booking->fresh()->status);
+    }
+
+    /** Part of the money is not all of it, and holds the room and no more. */
+    public function test_a_part_paid_booking_is_not_checked_in(): void
+    {
+        $booking = $this->book($this->day(0), $this->day(2), plan: 'advance');
+
+        app(PaymentService::class)->record($booking, ['amount' => 1800]);
+
+        $this->assertSame('confirmed', $booking->fresh()->status);
+        $this->assertNull($booking->fresh()->checked_in_at);
+    }
+
+    /**
+     * The status alone no longer says who is in the house.
+     *
+     * An advance stay whose balance is settled today but which starts in three
+     * weeks is checked in today, so anything asking "who is sleeping here
+     * tonight" has to ask the dates. The admin's in-house filter goes through
+     * this scope for exactly that reason.
+     */
+    public function test_a_future_stay_paid_today_is_not_in_the_house_tonight(): void
+    {
+        $future = $this->book($this->day(20), $this->day(22), plan: 'advance');
+        app(PaymentService::class)->record($future, ['amount' => 6000]);
+
+        $this->assertSame('checked_in', $future->fresh()->status);
+        $this->assertSame(0, Booking::inHouse()->count());
+    }
+
+    /**
+     * The sweep is the net under the live path.
+     *
+     * A stay settled while automatic check-in was switched off sits at
+     * `confirmed` with nothing left to trigger it. Turning the setting back on
+     * and running the command picks it up.
+     */
+    public function test_the_command_catches_a_booking_settled_while_switched_off(): void
+    {
+        $this->setAutoCheckIn(false);
+
+        $booking = $this->book($this->day(0), $this->day(2), plan: 'advance');
+        app(PaymentService::class)->record($booking, ['amount' => 6000]);
+        $this->assertSame('confirmed', $booking->fresh()->status);
+
+        $this->setAutoCheckIn(true);
+        $this->artisan('bookings:check-in-arrivals')->assertSuccessful();
+
+        $this->assertSame('checked_in', $booking->fresh()->status);
+    }
+
+    /** A stay still owing money is not checked in by the sweep either. */
+    public function test_the_command_leaves_an_unpaid_booking_alone(): void
+    {
+        $booking = $this->book($this->day(0), $this->day(2), plan: 'advance');
+
+        app(PaymentService::class)->record($booking, ['amount' => 1800]);
+
+        $this->artisan('bookings:check-in-arrivals')->assertSuccessful();
+
+        $this->assertSame('confirmed', $booking->fresh()->status);
+    }
+
+    /** A farm that would rather hand over keys itself can switch this off. */
+    public function test_automatic_check_in_can_be_switched_off(): void
+    {
+        $this->setAutoCheckIn(false);
+
+        $booking = $this->book($this->day(0), $this->day(2));
+
+        app(PaymentService::class)->record($booking, ['amount' => 6000]);
+        $this->artisan('bookings:check-in-arrivals')->assertSuccessful();
+
+        $this->assertSame('confirmed', $booking->fresh()->status);
     }
 
     /** A stay does not close with money still outstanding. */
@@ -525,6 +643,17 @@ class RoomBookingTest extends TestCase
     private function day(int $offset): CarbonImmutable
     {
         return Homestay::earliestDate()->addDays($offset);
+    }
+
+    /** The farm's switch for whether settling up checks a guest in. */
+    private function setAutoCheckIn(bool $on): void
+    {
+        Setting::where('key', 'auto_check_in_on_payment')
+            ->firstOrFail()
+            ->update(['value' => $on ? '1' : '0']);
+
+        // The settings map is cached, and a direct update fires no model event.
+        Setting::flushCache();
     }
 
     /**

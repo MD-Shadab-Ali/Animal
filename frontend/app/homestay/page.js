@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import RoomCard from '@/components/room/RoomCard';
+import StayFilters from '@/components/room/StayFilters';
 import GoatGridSkeleton from '@/components/ui/GoatGridSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { apiFetch } from '@/lib/api';
@@ -68,65 +69,32 @@ export default async function HomestayPage({ searchParams }) {
       <div className="section">
         <div className="container">
           {/*
-            A plain GET form rather than a client component.
+            Keyed on the current query so the fields follow the URL.
 
-            It is three fields and a button, and written this way it works
-            before any JavaScript has loaded, keeps the chosen dates in the URL
-            where they can be shared and bookmarked, and has no state to go
-            wrong. The shop's filter rail earns its interactivity; this does not.
+            The filters hold their own state once mounted, which is what makes
+            typing feel immediate -- but it also means new props alone would not
+            move them. Without this key, going Back after a search would restore
+            the old results above a form still showing the abandoned dates. The
+            key changes with the query, React remounts, and the two agree again.
           */}
-          <form method="get" className="stay-filters mb-4" aria-label="Find a room">
-            <div>
-              <label className="form-label small" htmlFor="filter-check-in">Arrive</label>
-              <input
-                id="filter-check-in"
-                type="date"
-                name="check_in"
-                className="form-control"
-                defaultValue={dates.check_in}
-                min={homestay.earliest_date}
-                max={homestay.latest_date}
-              />
-            </div>
-
-            <div>
-              <label className="form-label small" htmlFor="filter-check-out">Leave</label>
-              <input
-                id="filter-check-out"
-                type="date"
-                name="check_out"
-                className="form-control"
-                defaultValue={dates.check_out}
-                min={homestay.earliest_date}
-                max={homestay.latest_date}
-              />
-            </div>
-
-            <div>
-              <label className="form-label small" htmlFor="filter-guests">Guests</label>
-              <input
-                id="filter-guests"
-                type="number"
-                name="guests"
-                className="form-control"
-                min="1"
-                max="20"
-                defaultValue={dates.guests}
-                placeholder="Any"
-              />
-            </div>
-
-            <div className="stay-filters__go">
-              <button type="submit" className="btn btn-brand w-100">
-                <i className="bi bi-search me-1" aria-hidden="true" />Find a room
-              </button>
-            </div>
-          </form>
+          <StayFilters
+            key={`${dates.check_in}|${dates.check_out}|${dates.guests}`}
+            homestay={homestay}
+            dates={dates}
+          />
 
           <div className="toolbar">
+            {/*
+              "Available", never "free".
+
+              On a page where every other number is money, "2 rooms free on
+              those nights" reads first as two rooms at no charge. It means
+              unoccupied, and it is the only word here that can be taken two
+              ways -- so it goes.
+            */}
             <p className="text-soft small mb-0">
               <strong className="text-ink">{total}</strong> room{total === 1 ? '' : 's'}
-              {hasDates ? ' free on those nights' : ' available'}
+              {hasDates ? ' available on those nights' : ' available'}
             </p>
 
             {hasDates && (
@@ -140,7 +108,7 @@ export default async function HomestayPage({ searchParams }) {
             <div className="panel text-center py-5">
               <i className="bi bi-calendar-x d-block mb-2" style={{ fontSize: '2rem' }} aria-hidden="true" />
               <h2 className="h5 mb-1">
-                {hasDates ? 'Nothing free on those nights' : 'No rooms just now'}
+                {hasDates ? 'No rooms available on those nights' : 'No rooms just now'}
               </h2>
               <p className="text-soft small mb-0">
                 {hasDates

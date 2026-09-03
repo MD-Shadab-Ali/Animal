@@ -179,7 +179,27 @@ class OrderItem extends Model
             $previous->forceFill(['status' => 'available', 'sold_at' => null])->save();
         }
 
-        $this->forceFill(['goat_weight_id' => $animal?->id])->save();
+        /*
+         * The animal's weight becomes the line's real weight.
+         *
+         * I had this the other way round: assignment left the price alone,
+         * because a heavier goat would be settled on the scale at delivery.
+         * That was wrong for a pool, and collection is what exposed it. A
+         * pooled animal has already been on a scale -- that is what its weight
+         * column is -- so there is no later reading to wait for, and on a
+         * collection order there is no doorstep weigh-in at all. The buyer was
+         * ordering 20 kg, paying for 20 kg, and being handed 22.86 kg.
+         *
+         * Recorded through delivered_weight_kg so the money moves along the one
+         * path that already exists for it, rather than a second one that would
+         * have to agree with the first for ever.
+         */
+        $this->forceFill([
+            'goat_weight_id' => $animal?->id,
+            'delivered_weight_kg' => $animal ? (float) $animal->weight_kg : null,
+            'weighed_at' => $animal ? now() : null,
+            'weighed_by' => $animal ? auth()->id() : null,
+        ])->save();
 
         $animal?->markSold();
     }

@@ -291,8 +291,11 @@ class BookingService
          */
         if (! $room->isFreeBetween($checkIn, $checkOut)) {
             throw ValidationException::withMessages([
+                // "Available", not "free". In a sentence a guest reaches while
+                // spending money, "free" is read as costing nothing before it
+                // is read as unoccupied.
                 'check_in' => ['Some of those nights are already taken. '
-                    .'Please pick dates that are free on the calendar.'],
+                    .'Please pick dates that are still available.'],
             ]);
         }
     }

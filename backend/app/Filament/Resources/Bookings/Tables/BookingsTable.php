@@ -122,9 +122,13 @@ class BookingsTable
                     ->query(fn ($query) => $query->whereDate('check_in', today())
                         ->whereNotIn('status', ['cancelled', 'checked_out'])),
 
+                // Through the scope, which bounds this by the dates as well as
+                // the status. Paying in full checks a guest in whenever they
+                // pay, so a December stay settled today is `checked_in` today
+                // -- and a flat status filter would put them on tonight's list.
                 Filter::make('in_house')
                     ->label('In the house now')
-                    ->query(fn ($query) => $query->where('status', 'checked_in')),
+                    ->query(fn ($query) => $query->inHouse()),
 
                 TrashedFilter::make(),
             ])
@@ -274,7 +278,7 @@ class BookingsTable
 
                         Notification::make()
                             ->title($record->booking_number.' cancelled')
-                            ->body('The room is free on those nights again.')
+                            ->body('The room is available again on those nights.')
                             ->warning()
                             ->send();
                     }),

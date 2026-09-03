@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Contracts\Payable;
+use App\Support\Homestay;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -84,8 +85,16 @@ class Booking extends Model implements Payable
      * to anybody else. The order can afford that third plan because a rider
      * collects cash at a door, for an animal somebody is standing in front of.
      */
+    /*
+     * Named in the present tense, because a plan is a choice and not a receipt.
+     *
+     * This read "Paid in full now", which is a statement that the money has
+     * arrived -- and it was printed on the booking from the moment it was
+     * placed, directly beneath "Outstanding रु4,500". The guest was told the
+     * stay was settled and unsettled in the same breath.
+     */
     public const PAYMENT_PLANS = [
-        'full' => 'Paid in full now',
+        'full' => 'Paying in full',
         'advance' => 'Advance now, the rest on arrival',
     ];
 
@@ -143,9 +152,19 @@ class Booking extends Model implements Payable
         return $this->hasMany(Payment::class)->latest();
     }
 
+    /**
+     * Newest first, by id rather than by timestamp.
+     *
+     * `latest()` sorts on created_at, which is only accurate to the second --
+     * and a payment that confirms a booking and then checks it in writes two
+     * rows inside the same second. The tie broke arbitrarily, so a guest could
+     * be shown "Confirmed" sitting above "You are here": the same story told
+     * backwards. The id is monotonic, so it is exactly the order things
+     * happened in.
+     */
     public function statusHistories(): HasMany
     {
-        return $this->hasMany(BookingStatusHistory::class)->latest();
+        return $this->hasMany(BookingStatusHistory::class)->latest('id');
     }
 
     /*
@@ -355,6 +374,22 @@ class Booking extends Model implements Payable
         return $this->isFullyPaid();
     }
 
+    /**
+     * The moment this guest may walk in: the arrival date at the farm's hour.
+     *
+     * The time is the farm's rather than the booking's, because a room is ready
+     * when the farm says rooms are ready.
+     *
+     * Nothing gates check-in on this any more -- paying in full checks a guest
+     * in whenever they pay. It is kept because it is what the arrival actually
+     * means, and `scopeInHouse()` is the thing that now has to care about dates.
+     */
+    public function arrivalAt(): CarbonImmutable
+    {
+        return CarbonImmutable::parse($this->check_in)
+            ->setTimeFromTimeString(Homestay::checkInTime());
+    }
+
     /** Still to come, and still holding a room. */
     public function scopeUpcoming(Builder $query): Builder
     {
@@ -362,9 +397,22 @@ class Booking extends Model implements Payable
             ->where('check_out', '>=', now()->toDateString());
     }
 
+    /**
+     * Who is actually sleeping here tonight.
+     *
+     * The status alone stopped being able to answer this the moment paying in
+     * full started checking people in: a stay settled in September for a
+     * December week is `checked_in` from September. So the dates do the work,
+     * and the status only says the stay was not called off.
+     *
+     * Half-open at the far end, like everything else here: somebody leaving
+     * this morning is not in the house tonight.
+     */
     public function scopeInHouse(Builder $query): Builder
     {
-        return $query->where('status', 'checked_in');
+        return $query->where('status', 'checked_in')
+            ->whereDate('check_in', '<=', today())
+            ->whereDate('check_out', '>', today());
     }
 
     public function getStatusLabelAttribute(): string
@@ -488,13 +536,14 @@ class Booking extends Model implements Payable
     }
 
     /**
-     * Money in means the room is held.
+     * Move the stay on to whatever the money has just unlocked.
      *
-     * That is the whole of it, and the restraint is deliberate. The order can
-     * close itself on a payment because cash at the door is evidence a goat
-     * arrived; nothing a guest pays is evidence that they turned up, walked
-     * into a room, or left it. Those three are for a person to say, so this
-     * only ever moves a booking off `placed`.
+     * Two steps, and they answer different questions. Any money at all, once
+     * the advance is covered, means the room is held -- that is `confirmed`.
+     * The *balance* is a stronger signal, because on an advance plan the rest
+     * was only ever due on arrival, so paying it says the guest is here. That
+     * is the same reasoning Order::closeIfSettled() uses for cash handed to a
+     * rider at a door.
      */
     public function settleAfterPayment(?Payment $trigger): static
     {
@@ -504,15 +553,69 @@ class Booking extends Model implements Payable
             return $this;
         }
 
-        if ($this->status === 'placed'
-            && (float) $this->paid_amount > 0
-            && ! $this->awaiting_advance
-        ) {
-            $this->update(['status' => 'confirmed']);
+        $booking = $this;
 
-            return $this->fresh();
+        if ($booking->status === 'placed'
+            && (float) $booking->paid_amount > 0
+            && ! $booking->awaiting_advance
+        ) {
+            $booking->update(['status' => 'confirmed']);
+
+            $booking = $booking->fresh();
         }
 
-        return $this;
+        return $booking->checkInIfSettled();
+    }
+
+    /**
+     * Settling up checks the guest in.
+     *
+     * Money in full, and the stay moves on -- the same rule the order applies
+     * when a rider's cash closes it. There is deliberately no check on whether
+     * the arrival has come round: the farm's decision is that a paid stay is a
+     * confirmed arrival, and a guest who has paid everything should not have to
+     * wait on a date for their booking to say so.
+     *
+     * The cost of that is worth writing down, because something else has to
+     * carry it. A stay paid for in September and starting in December is
+     * `checked_in` from September, so `status` alone can no longer answer "who
+     * is sleeping here tonight". `scopeInHouse()` answers that with the dates,
+     * and the admin's "in the house now" filter goes through it.
+     */
+    private function checkInIfSettled(): static
+    {
+        if (! Setting::get('auto_check_in_on_payment', true)) {
+            return $this;
+        }
+
+        /*
+         * Advance plans only, and this is the whole of the rule.
+         *
+         * What makes a final payment mean "the guest is here" is not that it
+         * settles the bill -- it is *when it was due*. An advance plan says the
+         * rest is payable on arrival, so the rest arriving is the arrival. A
+         * full plan is paid at the moment of booking, weeks before anybody sets
+         * off; treating that as a check-in marks a guest present the instant
+         * they finish paying.
+         *
+         * Order::closeIfSettled() draws the same line for the same reason, and
+         * excludes `full` in exactly these words: "anything else was paid
+         * before the journey began".
+         */
+        if ($this->payment_plan !== 'advance') {
+            return $this;
+        }
+
+        if ($this->status !== 'confirmed' || ! $this->isFullyPaid()) {
+            return $this;
+        }
+
+        // Said on the history row, because "confirmed → checked in" with no
+        // note reads as a member of staff having done it.
+        $this->statusNote = 'Checked in — the balance was settled on arrival';
+
+        $this->update(['status' => 'checked_in']);
+
+        return $this->fresh();
     }
 }

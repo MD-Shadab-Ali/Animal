@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Order;
+use App\Models\OrderStatusHistory;
 use App\Models\PaymentMethod;
 use App\Models\Setting;
 use App\Support\Pickup;
@@ -87,7 +88,20 @@ class OrderResource extends JsonResource
             // order stops saying the goat is still with the courier.
             'items' => $this->whenLoaded('items', fn () => $this->items
                 ->map(fn ($item) => (new OrderItemResource($item))->forOrder($this->status))),
-            'history' => OrderStatusHistoryResource::collection($this->whenLoaded('statusHistories')),
+            /*
+             * The parent is handed to each row before serialising, so a row can
+             * tell whether the buyer wrote it without fetching the order it
+             * already belongs to -- four rows would otherwise be four queries
+             * for the record we are standing in.
+             */
+            'history' => $this->whenLoaded(
+                'statusHistories',
+                fn () => OrderStatusHistoryResource::collection(
+                    $this->statusHistories->each(
+                        fn (OrderStatusHistory $entry) => $entry->setRelation('order', $this->resource)
+                    )
+                )
+            ),
             'placed_at' => $this->created_at?->toIso8601String(),
             'delivered_at' => $this->delivered_at?->toIso8601String(),
         ];

@@ -403,6 +403,54 @@ class FarmCollectionTest extends TestCase
         );
     }
 
+    /**
+     * Every reply carries a whole order, not a partial one.
+     *
+     * OrderResource builds keys with whenLoaded, and a key whose relation is
+     * missing is not sent empty -- it is not sent at all. The action endpoints
+     * loaded only the lines, so pressing "I'm on my way" answered with an order
+     * that had no history on it. The page set that as its state, emptied
+     * "Updates from the farm", and the goat's photograph vanished until the
+     * next full fetch put it back.
+     */
+    public function test_setting_off_replies_with_the_whole_order(): void
+    {
+        Sanctum::actingAs($this->buyer);
+
+        $this->place(['pickup_at' => $this->slot()])->assertCreated();
+
+        $order = Order::latest('id')->firstOrFail();
+        $order->update(['status' => 'confirmed']);
+        $order->update(['status' => 'processing']);
+
+        $data = $this->postJson('/api/v1/orders/'.$order->order_number.'/on-my-way')
+            ->assertOk()
+            ->json('data');
+
+        // The three whenLoaded keys the buyer's page reads straight into state.
+        $this->assertArrayHasKey('history', $data, 'the updates panel is built from this');
+        $this->assertNotEmpty($data['history']);
+        $this->assertArrayHasKey('items', $data);
+        $this->assertNotNull($data['shipping']['zone']);
+    }
+
+    /** And so does cancelling, which reads the same page afterwards. */
+    public function test_cancelling_replies_with_the_whole_order(): void
+    {
+        Sanctum::actingAs($this->buyer);
+
+        $this->place(['pickup_at' => $this->slot()])->assertCreated();
+
+        $order = Order::latest('id')->firstOrFail();
+
+        $data = $this->postJson('/api/v1/orders/'.$order->order_number.'/cancel')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertArrayHasKey('history', $data);
+        $this->assertNotEmpty($data['history']);
+    }
+
     /** A malformed opening time falls back rather than offering no slots at all. */
     public function test_a_broken_opening_time_falls_back(): void
     {

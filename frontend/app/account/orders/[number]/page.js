@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
-import OrderPayment from '@/components/account/OrderPayment';
+import OrderPayment, { PaymentHistory } from '@/components/account/OrderPayment';
 import OrderRefund from '@/components/account/OrderRefund';
 import OrderTimeline, { BUYER_STATUS_LABELS } from '@/components/account/OrderTimeline';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -52,6 +52,19 @@ export default function OrderDetailPage() {
    * asking the provider directly.
    */
   const paymentResult = searchParams.get('payment');
+
+  /*
+   * These three are a receipt for the payment just made, not a fixture of the
+   * order.
+   *
+   * They ride on ?payment=success in the address bar, which never goes away --
+   * so a refreshed or bookmarked order went on announcing a payment that had
+   * landed days earlier, still sitting at the top while staff were penning the
+   * animal. They belong to the moment of return from the gateway, so they stop
+   * once the order moves past confirmed and the tracker below has the better
+   * answer.
+   */
+  const SETTLING_UP = ['pending', 'confirmed'];
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -155,10 +168,25 @@ export default function OrderDetailPage() {
   const refundSent = Number(order?.refund?.sent || 0);
   const itemCount = order.items?.length || 0;
 
+  const showPaymentResult = SETTLING_UP.includes(order.status);
+
+  /*
+   * Whether the buyer is coming to us or we are going to them. The `pickup`
+   * block is only sent on collection orders, so its presence is the answer --
+   * and the words for closing the order turn on it, because nothing "arrives"
+   * when you drove out and fetched it yourself.
+   */
+  const collecting = Boolean(order.pickup);
+
   const cancelWarnings = [
     'The goat goes back on sale, and we will let the farm know.',
     order.status === 'out_for_delivery'
-      ? 'It is already on its way to you, so please tell us as soon as you can.'
+      ? (collecting
+        // The goat is not travelling; the buyer is. Telling someone their goat
+        // is on its way to them, on the order where they agreed to fetch it,
+        // reads as the shop having lost track of the arrangement.
+        ? 'It is penned and waiting for you, so please tell us as soon as you can.'
+        : 'It is already on its way to you, so please tell us as soon as you can.')
       : '',
     paidSoFar > 0
       ? `You have paid ${formatMoney(paidSoFar, settings)} — you can ask for it back afterwards.`
@@ -174,6 +202,19 @@ export default function OrderDetailPage() {
   // the tracker above already says Placed, with the same timestamp.
   const updates = (order.history || [])
     .filter((entry) => entry.status !== 'pending')
+    /*
+     * From the farm, as the heading promises.
+     *
+     * Pressing "I'm on my way" writes a status note for staff -- "Buyer is on
+     * the way to collect." -- and it was being shown straight back to the buyer
+     * under "Updates from the farm": the shop telling them, in the third
+     * person, what they had just done themselves. The tracker above already
+     * marks that step with the time they pressed it.
+     *
+     * Compared against false rather than truthiness, so a response cached
+     * before the field existed still shows its updates.
+     */
+    .filter((entry) => entry.from_farm !== false)
     .filter((entry) => entry.note || entry.photo)
     /*
      * Words expire, photographs do not. "Preparing — here is your goat" is
@@ -208,14 +249,20 @@ export default function OrderDetailPage() {
 
   return (
     <div className="d-grid gap-4">
+      {/*
+        * "Arrived" is a delivery word. On a collection order nothing arrives --
+        * the buyer drove to the farm and took the goat home, and being asked
+        * whether it has turned up reads as though the shop has lost track of
+        * which arrangement they made.
+        */}
       <ConfirmDialog
         open={confirmingReceipt}
-        title="Has your goat arrived?"
+        title={collecting ? 'Have you collected your goat?' : 'Has your goat arrived?'}
         lines={[
           'Only say yes once the animal is actually with you.',
           'This closes the order and pays the farm, so it cannot be undone.',
         ]}
-        confirmLabel="Yes, it arrived"
+        confirmLabel={collecting ? 'Yes, I have it' : 'Yes, it arrived'}
         cancelLabel="Not yet"
         tone="brand"
         busy={receipting}
@@ -288,19 +335,25 @@ export default function OrderDetailPage() {
           proves. It also has to name the *next* step, which depends on how they
           chose to pay — promising a phone call while a "pay now" panel sits
           underneath it is worse than saying nothing. */}
-      {paymentResult === 'success' && (
+      {showPaymentResult && paymentResult === 'success' && (
         <div className="alert alert-success mb-0 d-flex gap-3 align-items-start">
           <i className="bi bi-check-circle-fill fs-5 lh-1 mt-1" aria-hidden="true" />
           <div>
             <strong className="d-block">Payment received.</strong>
             <span className="small">
-              Nothing more to do — we have your money and we are holding your goat.
+              {/* Never "nothing more to do" while something is owed. A goat
+                  weighed heavier than ordered moves the total after the money
+                  arrived, and this sat two inches from a summary reading
+                  "Still to pay" and flatly contradicted it. */}
+              {order.totals.balance_due > 0
+                ? `That leaves ${formatMoney(order.totals.balance_due, settings)} to settle — you can pay it below.`
+                : 'Nothing more to do — we have your money and we are holding your goat.'}
             </span>
           </div>
         </div>
       )}
 
-      {paymentResult === 'pending' && (
+      {showPaymentResult && paymentResult === 'pending' && (
         <div className="alert alert-warning mb-0 d-flex gap-3 align-items-start">
           <i className="bi bi-hourglass-split fs-5 lh-1 mt-1" aria-hidden="true" />
           <div>
@@ -313,7 +366,7 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {paymentResult === 'failed' && (
+      {showPaymentResult && paymentResult === 'failed' && (
         <div className="alert alert-danger mb-0 d-flex gap-3 align-items-start">
           <i className="bi bi-x-circle-fill fs-5 lh-1 mt-1" aria-hidden="true" />
           <div>
@@ -385,7 +438,9 @@ export default function OrderDetailPage() {
               <div className="mt-4 pt-3 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <span className="small text-soft">
                   <i className="bi bi-house-check me-1" aria-hidden="true" />
-                  Has it arrived? Let us know and we will close the order.
+                  {collecting
+                    ? 'Got it home? Let us know and we will close the order.'
+                    : 'Has it arrived? Let us know and we will close the order.'}
                 </span>
 
                 <button
@@ -394,7 +449,9 @@ export default function OrderDetailPage() {
                   onClick={() => setConfirmingReceipt(true)}
                   disabled={receipting}
                 >
-                  {receipting ? 'Confirming…' : 'Yes, my goat arrived'}
+                  {receipting
+                    ? 'Confirming…'
+                    : (collecting ? 'Yes, I collected my goat' : 'Yes, my goat arrived')}
                 </button>
               </div>
             )}
@@ -409,8 +466,21 @@ export default function OrderDetailPage() {
             <div className="panel">
               <h2 className="h6 mb-3">Updates from the farm</h2>
 
+              {/*
+                * Keyed on the update's own id, never its position.
+                *
+                * These arrive newest first, so a new one pushes every other row
+                * down a place. Keyed by index that renamed them all, and React
+                * rebuilt rows it should have left alone -- taking the goat's
+                * photograph and its tag code with them, so both were fetched
+                * again from nothing while the buyer watched a gap where they
+                * had been.
+                */}
               {updates.map((entry, index) => (
-                <div className="update-row" key={`${entry.status}-${entry.created_at}-${index}`}>
+                <div
+                  className="update-row"
+                  key={entry.id ?? `${entry.status}-${entry.created_at}`}
+                >
                   {/* Only the step the order is actually on still has anything
                       to say. Once it moves on, the heading and the note go and
                       the photo is left to speak for itself -- each update named
@@ -497,7 +567,17 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          <OrderPayment order={order} onPaid={load} />
+          {/*
+            * The record of what has been sent, left where there is room for it.
+            * Paying moved to the column beside the total; a five-column table
+            * did not follow it, because in 22rem it could only scroll sideways.
+            */}
+          {order.payment?.history?.length > 0 && (
+            <div className="panel">
+              <h2 className="h6 mb-3">Payments</h2>
+              <PaymentHistory history={order.payment.history} settings={settings} />
+            </div>
+          )}
 
           <OrderRefund order={order} onRequested={load} />
 
@@ -531,13 +611,21 @@ export default function OrderDetailPage() {
                       {item.weight_direction === 'same' ? (
                         <span className="text-brand">
                           <i className="bi bi-check-circle me-1" aria-hidden="true" />
-                          Weighed {item.delivered_weight_kg} kg at delivery — as ordered.
+                          {item.animal
+                            ? `The goat set aside for you weighs ${item.delivered_weight_kg} kg — as ordered.`
+                            : `Weighed ${item.delivered_weight_kg} kg at delivery — as ordered.`}
                         </span>
                       ) : (
                         <span className="text-soft">
                           <i className="bi bi-speedometer2 me-1" aria-hidden="true" />
-                          Ordered {item.weight_kg} kg · weighed{' '}
-                          <strong>{item.delivered_weight_kg} kg</strong> at delivery
+                          Ordered {item.weight_kg} kg ·{' '}
+                          {/* A pooled animal was weighed in the pen, not at a
+                              door it never went through. Saying "at delivery"
+                              on a goat the buyer is coming to collect describes
+                              an event that will not happen. */}
+                          {item.animal ? 'the one set aside weighs ' : 'weighed '}
+                          <strong>{item.delivered_weight_kg} kg</strong>
+                          {item.animal ? '' : ' at delivery'}
                           {item.weight_direction === 'increased' ? ' (heavier)' : ' (lighter)'}.
                           {/* The money follows the scale, so say so on the same
                               line. A changed total with no explanation beside it
@@ -572,7 +660,21 @@ export default function OrderDetailPage() {
                     </span>
                   )}
                 </div>
-                <div className="fw-bold">{formatMoney(item.line_total, settings)}</div>
+                {/*
+                  * What they actually pay, not what they first asked for. The
+                  * agreed figure stays visible underneath when the two differ:
+                  * printing the old number here and the real one in small text
+                  * further down is how a buyer ends up believing the total on
+                  * their order was the total on their order.
+                  */}
+                <div className="text-end">
+                  <div className="fw-bold">
+                    {formatMoney(item.charged_total ?? item.line_total, settings)}
+                  </div>
+                  {item.charged_total != null && item.charged_total !== item.line_total && (
+                    <del className="small text-soft">{formatMoney(item.line_total, settings)}</del>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -676,6 +778,15 @@ export default function OrderDetailPage() {
               )}
             </dl>
           </div>
+
+          {/*
+            * Directly under the summary, because the summary ends by saying
+            * what is still to pay and this is where it gets paid. In the main
+            * column it sat below the farm's photographs, a long way from the
+            * figure that prompts it -- and the money is the one thing on this
+            * page that is waiting on the buyer rather than on us.
+            */}
+          <OrderPayment order={order} onPaid={load} showHistory={false} />
 
           {/*
             * Collection and delivery are different promises, so they are not

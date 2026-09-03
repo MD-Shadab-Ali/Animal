@@ -60,8 +60,8 @@ class BookingForm
                         ->required()
                         ->native(false)
                         ->maxDate(Homestay::latestDate()->addDay())
-                        ->helperText('The departure day is not charged as a night, so the room is free '
-                            .'again for whoever arrives that afternoon.'),
+                        ->helperText('The departure day is not charged as a night, so the room is '
+                            .'available again for whoever arrives that afternoon.'),
 
                     TextInput::make('guests')
                         ->label('Guests')

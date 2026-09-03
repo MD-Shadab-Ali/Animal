@@ -166,7 +166,19 @@ export default function BookBox({ room }) {
     <div className="buybox buybox--sticky">
       <div className="d-flex align-items-baseline flex-wrap gap-2 mb-3">
         <span className="price-now">{formatMoney(pricing.per_night, settings)}</span>
-        <span className="text-soft small">a night</span>
+        {/*
+          "For 2", not just "a night".
+
+          A headline price with no number of people attached is read as the
+          price for whoever turns up, so a room advertised as sleeping three
+          looked like it slept three at this price. Saying who the rate covers
+          in the same breath as the rate is the only place that can be fixed --
+          by the time somebody presses the plus button they have already formed
+          a view about what a night costs.
+        */}
+        <span className="text-soft small">
+          a night{sleeps.included < sleeps.max ? ` for ${sleeps.included}` : ''}
+        </span>
       </div>
 
       <div className="row g-2 mb-3">
@@ -210,11 +222,7 @@ export default function BookBox({ room }) {
       <div className="mb-3">
         <div className="d-flex align-items-center justify-content-between mb-1">
           <span className="form-label mb-0" id="guests-label">Guests</span>
-          <span className="text-soft small">
-            {sleeps.included < sleeps.max
-              ? `Rate covers ${sleeps.included}, sleeps ${sleeps.max}`
-              : `Sleeps ${sleeps.max}`}
-          </span>
+          <span className="text-soft small">Sleeps up to {sleeps.max}</span>
         </div>
 
         <div className="qty">
@@ -236,6 +244,20 @@ export default function BookBox({ room }) {
             <i className="bi bi-plus" aria-hidden="true" />
           </button>
         </div>
+
+        {/*
+          What the next guest costs, said before the button is pressed.
+          "Sleeps 3" is a fact about the beds, not about the price, and a guest
+          who reads it as both only finds out otherwise when the total jumps.
+        */}
+        {sleeps.included < sleeps.max && (
+          <p className="text-soft small mt-2 mb-0">
+            {pricing.extra_guest_fee != null
+              ? `The rate covers ${sleeps.included}. Each guest after that is `
+                + `${formatMoney(pricing.extra_guest_fee, settings)} a night.`
+              : `The rate covers all ${sleeps.max}.`}
+          </p>
+        )}
       </div>
 
       {quote && (

@@ -12,13 +12,13 @@ use App\Filament\Resources\Orders\RelationManagers\StatusHistoriesRelationManage
 use App\Filament\Resources\Orders\Schemas\OrderForm;
 use App\Filament\Resources\Orders\Tables\OrdersTable;
 use App\Models\Order;
-use BackedEnum;
 use App\Support\RestrictsAccessByRole;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use UnitEnum;
 
 class OrderResource extends Resource
@@ -93,10 +93,10 @@ class OrderResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => ListOrders::route('/'),
+            'index' => ListOrders::route('/'),
             'create' => CreateOrder::route('/create'),
-            'view'  => ViewOrder::route('/{record}'),
-            'edit'  => EditOrder::route('/{record}/edit'),
+            'view' => ViewOrder::route('/{record}'),
+            'edit' => EditOrder::route('/{record}/edit'),
         ];
     }
 }

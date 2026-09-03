@@ -2,9 +2,10 @@
 
 namespace App\Filament\Resources\Orders\RelationManagers;
 
-use BackedEnum;
 use App\Models\OrderItem;
+use App\Models\Setting;
 use App\Services\SellerFulfilmentService;
+use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -79,8 +80,8 @@ class ItemsRelationManager extends RelationManager
                     ->color(fn (OrderItem $record) => match ($record->weight_direction) {
                         'increased' => 'info',
                         'decreased' => 'warning',
-                        'same'      => 'success',
-                        default     => 'gray',
+                        'same' => 'success',
+                        default => 'gray',
                     })
                     ->formatStateUsing(function ($state, OrderItem $record) {
                         $kg = rtrim(rtrim((string) $state, '0'), '.').' kg';
@@ -107,12 +108,12 @@ class ItemsRelationManager extends RelationManager
                             return '—';
                         }
 
-                        $symbol = \App\Models\Setting::currencySymbol();
+                        $symbol = Setting::currencySymbol();
 
                         return ($delta < 0 ? '-' : '+').$symbol.number_format(abs($delta), 2);
                     })
                     ->description(fn (OrderItem $record) => abs((float) $record->price_adjustment) >= 0.005
-                        ? 'Charged '.\App\Models\Setting::currencySymbol()
+                        ? 'Charged '.Setting::currencySymbol()
                             .number_format($record->charged_line_total, 2)
                         : null),
 
@@ -140,7 +141,7 @@ class ItemsRelationManager extends RelationManager
                     ])
                     ->action(function (OrderItem $record, array $data): void {
                         $record->update([
-                            'fulfilment_status'     => $data['fulfilment_status'],
+                            'fulfilment_status' => $data['fulfilment_status'],
                             'fulfilment_updated_at' => now(),
                         ]);
 

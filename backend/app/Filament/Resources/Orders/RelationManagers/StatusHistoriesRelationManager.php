@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\Orders\RelationManagers;
 
-use BackedEnum;
 use App\Models\Order;
+use BackedEnum;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;

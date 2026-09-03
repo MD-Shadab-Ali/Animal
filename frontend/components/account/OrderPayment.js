@@ -29,7 +29,15 @@ const HEADINGS = {
  * method, so nothing here is hardcoded. Submitting is a declaration, not a
  * receipt — staff check it against the account before the order moves.
  */
-export default function OrderPayment({ order, onPaid }) {
+/*
+ * `showHistory` splits the doing from the record.
+ *
+ * The panel moved into the narrow right-hand column, where the five-column
+ * table of past payments could only scroll sideways. Paying is the thing that
+ * belongs beside the total; what has already been sent is a ledger, and a
+ * ledger wants the width of the page.
+ */
+export default function OrderPayment({ order, onPaid, showHistory = true }) {
   const { token } = useAuth();
   const settings = useSettings();
 
@@ -133,7 +141,7 @@ export default function OrderPayment({ order, onPaid }) {
             : '.'}
         </p>
 
-        {history.length > 0 && (
+        {showHistory && history.length > 0 && (
           <div className="mt-4 pt-3 border-top">
             <h3 className="h6 mb-3">What you have paid</h3>
             <PaymentHistory history={history} settings={settings} />
@@ -164,7 +172,7 @@ export default function OrderPayment({ order, onPaid }) {
           and there is nothing more to do in the meantime.
         </p>
 
-        {history.length > 0 && (
+        {showHistory && history.length > 0 && (
           <div className="mt-4 pt-3 border-top">
             <h3 className="h6 mb-3">What you have sent</h3>
             <PaymentHistory history={history} settings={settings} />
@@ -191,7 +199,9 @@ export default function OrderPayment({ order, onPaid }) {
 
   // Not due yet, already settled, or cancelled — show the record only.
   if (!payment.can_pay_now) {
-    if (!history.length) return null;
+    // Nothing to do and nothing to show: with the record rendered elsewhere
+    // this branch has no panel left to be.
+    if (!showHistory || !history.length) return null;
 
     return (
       <div className="panel">
@@ -227,10 +237,40 @@ export default function OrderPayment({ order, onPaid }) {
           </>
         )}
 
+        {/*
+          * This read "You have paid Rs 2,000 so far. This settles the order in
+          * full." -- and "this" had nothing to point at. Sitting directly after
+          * the amount already paid, it read as a claim about that amount, on an
+          * order with Rs 286 still outstanding. It meant the payment about to
+          * be made, and never once named it.
+          *
+          * So the amount is named, and where the extra came from is explained:
+          * a buyer who chose to pay in full and then finds a balance is owed a
+          * reason before they are asked for money.
+          */}
         {payment.due_kind === 'balance' && (
           <>
-            You have paid {formatMoney(order.totals.paid, settings)} so far. This settles the
-            order in full.{' '}
+            You have paid {formatMoney(order.totals.paid, settings)} so far.{' '}
+
+            {order.totals.weight_adjustment > 0 && (
+              <>
+                The goat set aside for you weighs more than you ordered, which added{' '}
+                {formatMoney(order.totals.weight_adjustment, settings)} to the total.{' '}
+              </>
+            )}
+
+            {payment.amount_due_now >= payment.balance_due ? (
+              <>
+                Paying the remaining {formatMoney(payment.amount_due_now, settings)} settles
+                the order in full.{' '}
+              </>
+            ) : (
+              <>
+                Paying {formatMoney(payment.amount_due_now, settings)} now leaves{' '}
+                {formatMoney(payment.balance_due - payment.amount_due_now, settings)} to
+                settle later.{' '}
+              </>
+            )}
           </>
         )}
 
@@ -246,33 +286,39 @@ export default function OrderPayment({ order, onPaid }) {
           : 'Send the money using any of the accounts below, then tell us about it. We check every payment by hand before the goat goes out.'}
       </p>
 
-      <div className="row g-2 mb-4">
-        {methods.map((entry) => (
-          <div className="col-sm-6 col-lg-4" key={entry.code}>
-            <button
-              type="button"
-              onClick={() => setMethod(entry.code)}
-              className={`panel w-100 h-100 text-start ${method === entry.code ? 'border-brand' : ''}`}
-              style={{ cursor: 'pointer', borderWidth: method === entry.code ? 2 : 1 }}
-            >
-              <div className="d-flex align-items-center gap-2 mb-1">
-                {entry.logo && <img src={entry.logo} alt="" style={{ height: 20 }} />}
-                <span className="fw-semibold text-ink">{entry.name}</span>
-                {method === entry.code && (
-                  <i className="bi bi-check-circle-fill text-brand ms-auto" aria-hidden="true" />
-                )}
-              </div>
+      {/*
+        * The same control the buyer met at checkout.
+        *
+        * It was three cards wide, which put the account details of every method
+        * on screen at once and buried the thing they came here to do. A row of
+        * cards is for choosing between things worth comparing; this is the same
+        * question the checkout already asked, so it gets the same answer -- one
+        * line, with the details for whichever is picked appearing underneath
+        * rather than all of them at once.
+        */}
+      <div className="mb-4">
+        <label className="form-label" htmlFor="balance_method">How would you like to pay?</label>
 
-              {entry.payee?.account_number && (
-                <div className="small text-soft">
-                  {entry.payee.bank_name && <>{entry.payee.bank_name}<br /></>}
-                  <span className="text-ink fw-semibold">{entry.payee.account_number}</span>
-                  {entry.payee.account_name && <><br />{entry.payee.account_name}</>}
-                </div>
-              )}
-            </button>
+        <select
+          id="balance_method"
+          className={`form-select ${errors.method ? 'is-invalid' : ''}`}
+          value={method}
+          onChange={(event) => setMethod(event.target.value)}
+        >
+          {methods.map((entry) => (
+            <option key={entry.code} value={entry.code}>{entry.name}</option>
+          ))}
+        </select>
+
+        {/* The logo only. Whichever block follows -- the account details for a
+            transfer, or the gateway button -- already carries this method's
+            instructions, and printing them here as well would say the same
+            thing twice a few centimetres apart. */}
+        {chosen?.logo && (
+          <div className="mt-2">
+            <img src={chosen.logo} alt={chosen.name} style={{ height: 20 }} />
           </div>
-        ))}
+        )}
       </div>
 
       {chosen && ! chosen.is_gateway && (
@@ -395,7 +441,7 @@ export default function OrderPayment({ order, onPaid }) {
       </form>
       )}
 
-      {history.length > 0 && (
+      {showHistory && history.length > 0 && (
         <div className="mt-4 pt-3 border-top">
           <h3 className="h6 mb-3">What you have sent</h3>
           <PaymentHistory history={history} settings={settings} />
@@ -405,7 +451,7 @@ export default function OrderPayment({ order, onPaid }) {
   );
 }
 
-function PaymentHistory({ history, settings }) {
+export function PaymentHistory({ history, settings }) {
   return (
     <div className="table-responsive">
       <table className="table align-middle mb-0">

@@ -27,7 +27,7 @@ class ViewOrder extends ViewRecord
                         TextEntry::make('order_number')->label('Number')->copyable(),
                         TextEntry::make('status')
                             ->badge()
-                            ->formatStateUsing(fn (?string $state) => Order::STATUSES[$state] ?? $state)
+                            ->formatStateUsing(fn (?string $state, Order $record) => $record->statusLabels()[$state] ?? $state)
                             ->color(fn (?string $state) => Order::STATUS_COLORS[$state] ?? 'gray'),
                         TextEntry::make('created_at')->label('Placed')->dateTime('d M Y, g:i a'),
                         TextEntry::make('delivered_at')->dateTime('d M Y, g:i a')->placeholder('Not yet delivered'),

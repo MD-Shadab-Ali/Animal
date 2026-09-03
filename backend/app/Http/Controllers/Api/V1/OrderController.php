@@ -15,6 +15,24 @@ use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
+    /**
+     * What an order has to arrive with, wherever it is returned from.
+     *
+     * OrderResource builds several of its keys with whenLoaded, and a key whose
+     * relation is missing is not sent as empty -- it is not sent at all. The
+     * action endpoints loaded only the lines, so every one of them replied with
+     * an order that had no `history` on it, and the buyer's page dutifully
+     * emptied its "Updates from the farm" panel and waited for the next full
+     * fetch to put it back. Pressing "I'm on my way" made the goat's photograph
+     * vanish for as long as that took.
+     *
+     * One list, used by all of them, so a reply cannot quietly be a different
+     * shape from the one the page was already holding.
+     */
+    private const RELATIONS = [
+        'items.goat', 'items.goatWeight', 'deliveryZone', 'statusHistories', 'payments',
+    ];
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $orders = Order::with('items')
@@ -27,7 +45,7 @@ class OrderController extends Controller
 
     public function show(Request $request, string $orderNumber): OrderResource
     {
-        $order = Order::with(['items.goat', 'items.goatWeight', 'deliveryZone', 'statusHistories', 'payments'])
+        $order = Order::with(self::RELATIONS)
             ->where('user_id', $request->user()->id)
             ->where('order_number', $orderNumber)
             ->firstOrFail();
@@ -133,7 +151,7 @@ class OrderController extends Controller
         if ($order->status === 'delivered') {
             return response()->json([
                 'message' => 'Thanks — this order is already marked as delivered.',
-                'data' => new OrderResource($order->load(['items.goatWeight'])),
+                'data' => new OrderResource($order->load(self::RELATIONS)),
             ]);
         }
 
@@ -151,7 +169,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Thank you — enjoy your goat!',
-            'data' => new OrderResource($order->fresh()->load(['items.goatWeight'])),
+            'data' => new OrderResource($order->fresh()->load(self::RELATIONS)),
         ]);
     }
 
@@ -176,7 +194,7 @@ class OrderController extends Controller
         if (in_array($order->status, ['out_for_delivery', 'delivered'], true)) {
             return response()->json([
                 'message' => 'Thanks — we know you are on your way.',
-                'data' => new OrderResource($order->load(['items.goatWeight'])),
+                'data' => new OrderResource($order->load(self::RELATIONS)),
             ]);
         }
 
@@ -200,7 +218,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Thanks — we will have the goat penned and ready.',
-            'data' => new OrderResource($order->fresh()->load(['items.goatWeight'])),
+            'data' => new OrderResource($order->fresh()->load(self::RELATIONS)),
         ]);
     }
 
@@ -220,7 +238,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Order cancelled.',
-            'data' => new OrderResource($order->fresh()->load(['items.goatWeight'])),
+            'data' => new OrderResource($order->fresh()->load(self::RELATIONS)),
         ]);
     }
 }
