@@ -2147,6 +2147,24 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   color: #fff;
   transition: background-color var(--speed) var(--ease);
 }
+/*
+ * The heart stays 36px because a wider circle crowds the photo, but 36px is
+ * under the touch minimum and this is the one control on the tile you aim at
+ * rather than tap anywhere. Grow the hit area, not the button: the
+ * pseudo-element is invisible, centred, and carries no paint, so the tile looks
+ * exactly as before while a thumb gets its 44px. It sits alone in the corner,
+ * so the larger target cannot overlap anything else.
+ */
+.goat-tile__wish::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
 .goat-tile__wish:hover { background: rgba(255, 255, 255, .32); color: #fff; }
 .goat-tile__wish.is-on { background: #fff; color: var(--brand-primary); }
 
