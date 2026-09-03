@@ -87,10 +87,21 @@ class SellerPayoutRequestTest extends TestCase
             'address_line' => 'House 12',
             'city' => 'Dhaka',
             'delivery_zone_id' => DeliveryZone::active()->firstOrFail()->id,
-            // Cash on delivery settles an order, it cannot start one, so the
-            // wallet places it and nothing is owed until the goat is on its way.
+            /*
+             * All this needs is an order that reaches `delivered` and earns
+             * the seller something; how the buyer paid is beside the point,
+             * and `markDelivered` settles it in full either way.
+             *
+             * It has to be paid up front, though. An order can only be placed
+             * on a method that takes money online, and only on `full` or
+             * `advance`: cash on delivery settles an order, it cannot start
+             * one, and deferring the whole amount on a gateway is the same
+             * thing wearing another name. This used to ask eSewa for
+             * `on_delivery`, which is refused, and it took every test in here
+             * that places an order down with it.
+             */
             'payment_method' => 'esewa',
-            'payment_plan' => 'on_delivery',
+            'payment_plan' => 'full',
         ])->assertCreated()->json('data.order_number');
 
         $order = Order::where('order_number', $number)->firstOrFail();
