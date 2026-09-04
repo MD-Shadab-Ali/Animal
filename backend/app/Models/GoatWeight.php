@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use BaconQrCode\Common\ErrorCorrectionLevel;
+use BaconQrCode\Encoder\Encoder;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
@@ -10,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * One real animal under a listing, at its real weight.
@@ -70,6 +73,98 @@ class GoatWeight extends Model
     public function qrDataUri(int $size = 220): string
     {
         return 'data:image/svg+xml;base64,'.base64_encode($this->qrSvg($size));
+    }
+
+    /**
+     * The same code as a photograph rather than a drawing.
+     *
+     * A tag that has been downloaded gets handled by everything that is not a
+     * browser -- pasted into a label sheet, sent over WhatsApp, opened from a
+     * phone's gallery -- and to most of those an SVG is not an image at all.
+     *
+     * Drawn a whole module at a time at a size that divides exactly, never
+     * scaled afterwards: resampling blurs precisely the edges a scanner reads,
+     * and JPEG is unforgiving about soft edges in a way SVG never had to be.
+     */
+    public function qrJpeg(int $size = 512): string
+    {
+        if (! function_exists('imagejpeg')) {
+            throw new RuntimeException('PHP needs the GD extension to save QR codes as JPEG.');
+        }
+
+        $matrix = Encoder::encode($this->publicUrl(), ErrorCorrectionLevel::L())->getMatrix();
+
+        /*
+         * The quiet zone is part of the code, not padding around it: without
+         * a clear margin a scanner cannot find where the code begins. Four
+         * modules is what the standard asks for.
+         */
+        $quietZone = 4;
+        $modules = $matrix->getWidth() + ($quietZone * 2);
+        $modulePixels = max(1, intdiv($size, $modules));
+        $side = $modules * $modulePixels;
+
+        $image = imagecreatetruecolor($side, $side);
+        $white = imagecolorallocate($image, 255, 255, 255);
+        $black = imagecolorallocate($image, 0, 0, 0);
+
+        imagefilledrectangle($image, 0, 0, $side - 1, $side - 1, $white);
+
+        for ($y = 0; $y < $matrix->getHeight(); $y++) {
+            for ($x = 0; $x < $matrix->getWidth(); $x++) {
+                if ($matrix->get($x, $y) !== 1) {
+                    continue;
+                }
+
+                $left = ($x + $quietZone) * $modulePixels;
+                $top = ($y + $quietZone) * $modulePixels;
+
+                imagefilledrectangle(
+                    $image,
+                    $left,
+                    $top,
+                    $left + $modulePixels - 1,
+                    $top + $modulePixels - 1,
+                    $black,
+                );
+            }
+        }
+
+        ob_start();
+        // 95 rather than a middling default: above 90 libgd stops subsampling
+        // the colour channels, and smeared module edges are the one thing a
+        // code that has to survive being printed cannot afford.
+        imagejpeg($image, null, 95);
+
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * What a downloaded tag is called on disk.
+     *
+     * The listing and the weight, because that is what somebody holding a
+     * stack of printed tags is working from: they know which pen the sheet is
+     * for and they are looking for the 17.5 kg one. A row id would tell them
+     * nothing, and a bare token even less.
+     */
+    public function qrFileName(): string
+    {
+        return static::fileNamePart($this->goat?->name ?? 'Goat')
+            .'-'.str_replace(' ', '', $this->weightLabel()).'.jpg';
+    }
+
+    /**
+     * A name that is still a filename on Windows, macOS and Linux alike.
+     *
+     * Deliberately not Str::slug: this is read by staff off a download folder,
+     * so "Black-Bengal-Buck" beats "black-bengal-buck" and the capitals cost
+     * nothing.
+     */
+    public static function fileNamePart(string $value): string
+    {
+        $safe = trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', $value), '-');
+
+        return $safe === '' ? 'Goat' : $safe;
     }
 
     protected function casts(): array
@@ -163,8 +258,17 @@ class GoatWeight extends Model
     /** How staff refer to it: the tag if there is one, else the weight. */
     public function label(): string
     {
-        $weight = rtrim(rtrim(number_format((float) $this->weight_kg, 2), '0'), '.').' kg';
+        return $this->tag ? $this->tag.' · '.$this->weightLabel() : $this->weightLabel();
+    }
 
-        return $this->tag ? $this->tag.' · '.$weight : $weight;
+    /**
+     * The weight as it is said out loud: 15 kg, 17.5 kg -- never 15.00 kg.
+     *
+     * Grouped separators are left off on purpose: this ends up in a filename,
+     * and no goat weighs enough to need a comma anyway.
+     */
+    public function weightLabel(): string
+    {
+        return rtrim(rtrim(number_format((float) $this->weight_kg, 2, '.', ''), '0'), '.').' kg';
     }
 }

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\PaymentReceivedNotification;
 use App\Notifications\PaymentSubmittedNotification;
 use App\Notifications\RefundRequestedNotification;
+use App\Notifications\RefundRequestReceivedNotification;
 use App\Notifications\RefundSentNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -86,17 +87,17 @@ class PaymentService
         }
 
         $payment = $this->create($subject, [
-            'user_id'               => $payer->id,
-            'method'                => $method->code,
-            'amount'                => $data['amount'],
-            'type'                  => 'payment',
-            'status'                => 'pending',
-            'source'                => 'customer',
+            'user_id' => $payer->id,
+            'method' => $method->code,
+            'amount' => $data['amount'],
+            'type' => 'payment',
+            'status' => 'pending',
+            'source' => 'customer',
             'transaction_reference' => $data['transaction_reference'] ?? null,
-            'proof'                 => $data['proof'] ?? null,
-            'note'                  => $data['note'] ?? null,
-            'paid_at'               => $data['paid_at'] ?? now(),
-            'created_by'            => $payer->id,
+            'proof' => $data['proof'] ?? null,
+            'note' => $data['note'] ?? null,
+            'paid_at' => $data['paid_at'] ?? now(),
+            'created_by' => $payer->id,
         ]);
 
         $staff = User::staffRecipients();
@@ -116,18 +117,18 @@ class PaymentService
     public function record(Payable $subject, array $data, ?User $by = null): Payment
     {
         $payment = $this->create($subject, [
-            'user_id'               => $subject->payer()?->getKey(),
-            'method'                => $data['method'] ?? $subject->defaultPaymentMethod(),
-            'amount'                => $data['amount'],
-            'type'                  => $data['type'] ?? 'payment',
-            'status'                => 'confirmed',
-            'source'                => 'staff',
+            'user_id' => $subject->payer()?->getKey(),
+            'method' => $data['method'] ?? $subject->defaultPaymentMethod(),
+            'amount' => $data['amount'],
+            'type' => $data['type'] ?? 'payment',
+            'status' => 'confirmed',
+            'source' => 'staff',
             'transaction_reference' => $data['transaction_reference'] ?? null,
-            'note'                  => $data['note'] ?? null,
-            'paid_at'               => $data['paid_at'] ?? now(),
-            'confirmed_at'          => now(),
-            'confirmed_by'          => $by?->id,
-            'created_by'            => $by?->id,
+            'note' => $data['note'] ?? null,
+            'paid_at' => $data['paid_at'] ?? now(),
+            'confirmed_at' => now(),
+            'confirmed_by' => $by?->id,
+            'created_by' => $by?->id,
         ]);
 
         $this->sync($subject->fresh());
@@ -162,17 +163,17 @@ class PaymentService
         }
 
         $payment = $this->create($subject, [
-            'user_id'           => $payer->id,
-            'method'            => $data['method'] ?? $subject->defaultPaymentMethod(),
-            'amount'            => $subject->refundableAmount(),
-            'type'              => 'refund',
-            'status'            => 'pending',
-            'source'            => 'customer',
-            'refund_to_name'    => $data['refund_to_name'] ?? null,
+            'user_id' => $payer->id,
+            'method' => $data['method'] ?? $subject->defaultPaymentMethod(),
+            'amount' => $subject->refundableAmount(),
+            'type' => 'refund',
+            'status' => 'pending',
+            'source' => 'customer',
+            'refund_to_name' => $data['refund_to_name'] ?? null,
             'refund_to_account' => $data['refund_to_account'] ?? null,
-            'refund_to_bank'    => $data['refund_to_bank'] ?? null,
-            'refund_reason'     => $data['refund_reason'] ?? null,
-            'created_by'        => $payer->id,
+            'refund_to_bank' => $data['refund_to_bank'] ?? null,
+            'refund_reason' => $data['refund_reason'] ?? null,
+            'created_by' => $payer->id,
         ]);
 
         $staff = User::staffRecipients();
@@ -180,6 +181,13 @@ class PaymentService
         if ($staff->isNotEmpty()) {
             Notification::send($staff, new RefundRequestedNotification($payment));
         }
+
+        /*
+         * And the person who asked. Staff were told a job had arrived; the
+         * buyer was told nothing at all, and was left refreshing a page to find
+         * out whether asking had worked.
+         */
+        $payer->notify(new RefundRequestReceivedNotification($payment));
 
         return $payment;
     }
@@ -192,7 +200,7 @@ class PaymentService
         }
 
         $payment->update([
-            'status'       => 'confirmed',
+            'status' => 'confirmed',
             'confirmed_at' => now(),
             'confirmed_by' => $by?->id,
         ]);
@@ -216,8 +224,8 @@ class PaymentService
     public function reject(Payment $payment, ?string $reason = null, ?User $by = null): Payment
     {
         $payment->update([
-            'status'       => 'rejected',
-            'note'         => $reason ?: $payment->note,
+            'status' => 'rejected',
+            'note' => $reason ?: $payment->note,
             'confirmed_at' => null,
             'confirmed_by' => $by?->id,
         ]);
@@ -253,12 +261,12 @@ class PaymentService
             ->exists();
 
         $subject->forceFill([
-            'paid_amount'    => max($paid, 0),
+            'paid_amount' => max($paid, 0),
             'payment_status' => match (true) {
-                $refunded              => 'refunded',
-                $paid <= 0             => 'unpaid',
+                $refunded => 'refunded',
+                $paid <= 0 => 'unpaid',
                 $paid + 0.01 >= $total => 'paid',
-                default                => 'partially_paid',
+                default => 'partially_paid',
             },
         ])->save();
 
@@ -270,7 +278,7 @@ class PaymentService
         return DB::transaction(fn () => Payment::create($attributes + [
             'reference' => $this->reference(),
             $subject->paymentForeignKey() => $subject->getKey(),
-            'currency'  => $subject->paymentCurrency(),
+            'currency' => $subject->paymentCurrency(),
         ]));
     }
 

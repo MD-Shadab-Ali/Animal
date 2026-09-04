@@ -29,6 +29,36 @@ export function formatAge(months) {
   return rest ? `${years} yr ${rest} mo` : `${years} yr`;
 }
 
+/**
+ * How long ago, in the words people use out loud.
+ *
+ * A notification is read as "did this just happen?", and a full date makes the
+ * reader do the arithmetic. Past a week the answer stops being a duration and
+ * becomes a date again, which is why this hands over to formatDate rather than
+ * counting weeks nobody can picture.
+ */
+export function formatSince(value) {
+  if (!value) return '';
+
+  const seconds = Math.floor((Date.now() - new Date(value).getTime()) / 1000);
+
+  // Clocks drift, and a server can be a second ahead. "In 1 second" would be an
+  // odd thing for a shop to tell somebody about their own order.
+  if (seconds < 60) return 'Just now';
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+
+  return formatDate(value);
+}
+
 export function formatDate(value) {
   if (!value) return '';
   return new Date(value).toLocaleDateString('en-GB', {

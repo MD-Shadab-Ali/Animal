@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\Bookings\Pages\CreateBooking;
 use App\Filament\Resources\Bookings\Pages\EditBooking;
+use App\Filament\Resources\Bookings\Pages\ListBookings;
 use App\Models\Booking;
 use App\Models\BookingNight;
 use App\Models\PaymentMethod;
@@ -206,6 +207,54 @@ class HomestayAdminTest extends TestCase
     |--------------------------------------------------------------------------
     */
 
+    /**
+     * The list is the stays that are happening, not the ones being asked for.
+     *
+     * A booking exists from the moment a guest picks their nights, before any
+     * money has moved. Reading a screen of those as the day's business is how
+     * a bed gets made up for somebody who never paid and never comes.
+     */
+    public function test_an_unconfirmed_hold_is_not_in_the_list_by_default(): void
+    {
+        $held = $this->bookViaAdmin($this->day(0), $this->day(2));
+        $confirmed = $this->bookViaAdmin($this->day(4), $this->day(6));
+        $confirmed->update(['status' => 'confirmed']);
+
+        $this->assertSame('placed', $held->fresh()->status);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListBookings::class)
+            ->assertCanSeeTableRecords([$confirmed])
+            ->assertCanNotSeeTableRecords([$held]);
+    }
+
+    /**
+     * But it is one click away, because it is still holding the room.
+     *
+     * Nothing expires an unpaid hold, and cancelling it here is the only thing
+     * that gives those nights back to the calendar. Hidden for good, it would
+     * be a room blocked on dates with no row anywhere to explain them.
+     */
+    public function test_an_unconfirmed_hold_can_still_be_found_and_called_off(): void
+    {
+        $held = $this->bookViaAdmin($this->day(0), $this->day(2));
+
+        $this->assertSame([
+            $this->day(0)->toDateString(),
+            $this->day(1)->toDateString(),
+        ], $this->heldNights());
+
+        Livewire::actingAs($this->admin)
+            ->test(ListBookings::class)
+            ->filterTable('confirmed_only', false)
+            ->assertCanSeeTableRecords([$held]);
+
+        // And calling it off is what hands the nights back.
+        $held->update(['status' => 'cancelled']);
+
+        $this->assertSame([], $this->heldNights());
+    }
+
     private function day(int $offset): CarbonImmutable
     {
         return Homestay::earliestDate()->addDays($offset);
@@ -225,16 +274,16 @@ class HomestayAdminTest extends TestCase
     private function formData(CarbonImmutable $checkIn, CarbonImmutable $checkOut): array
     {
         return [
-            'room_id'        => $this->room->id,
-            'user_id'        => $this->guest->id,
-            'check_in'       => $checkIn->toDateString(),
-            'check_out'      => $checkOut->toDateString(),
-            'guests'         => 2,
-            'guest_name'     => 'Sita Rai',
-            'guest_phone'    => '+977 9800-222222',
-            'guest_email'    => 'sita@example.test',
+            'room_id' => $this->room->id,
+            'user_id' => $this->guest->id,
+            'check_in' => $checkIn->toDateString(),
+            'check_out' => $checkOut->toDateString(),
+            'guests' => 2,
+            'guest_name' => 'Sita Rai',
+            'guest_phone' => '+977 9800-222222',
+            'guest_email' => 'sita@example.test',
             'payment_method' => 'bank_transfer',
-            'payment_plan'   => 'full',
+            'payment_plan' => 'full',
         ];
     }
 

@@ -116,6 +116,33 @@ class Payment extends Model
     }
 
     /** The same list, short enough for a table cell. */
+    /**
+     * What this money was for, in words a buyer would use.
+     *
+     * A payment hangs off an order or off a stay, never both and never
+     * neither, so anything reading it has to ask which -- and "order GH-..."
+     * means nothing to somebody who paid for a room.
+     */
+    public function subjectLabel(): string
+    {
+        return match (true) {
+            $this->order !== null => 'order '.$this->order->order_number,
+            $this->booking !== null => 'your stay'
+                .($this->booking->room?->name ? ' in the '.$this->booking->room->name : ''),
+            default => 'your account',
+        };
+    }
+
+    /** Where on the storefront this payment can be looked at. */
+    public function storefrontUrl(): string
+    {
+        return match (true) {
+            $this->order !== null => '/account/orders/'.$this->order->order_number,
+            $this->booking !== null => '/account/bookings/'.$this->booking->booking_number,
+            default => '/account/payments',
+        };
+    }
+
     public function getGoatsSummaryAttribute(): string
     {
         $goats = $this->goats();

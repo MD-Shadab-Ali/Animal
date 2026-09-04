@@ -53,8 +53,8 @@ class PaymentSubmittedNotification extends Notification implements ShouldQueue
     {
         return [
             'title' => 'Payment to check',
-            'body'  => $this->payment->subject()?->paymentReference().' — '.$this->payment->goats_summary,
-            'url'   => '/admin/payments',
+            'body' => $this->payment->subject()?->paymentReference().' — '.$this->payment->goats_summary,
+            'url' => '/admin/payments',
         ];
     }
 }

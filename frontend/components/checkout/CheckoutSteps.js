@@ -1,5 +1,8 @@
 'use client';
 
+import { m } from 'motion/react';
+import { TRANSITION } from '@/lib/motion';
+
 export const CHECKOUT_STEPS = [
   { id: 1, label: 'Delivery', icon: 'bi-truck' },
   { id: 2, label: 'Payment', icon: 'bi-wallet2' },
@@ -33,6 +36,22 @@ export default function CheckoutSteps({ current, onJump }) {
               aria-current={isCurrent ? 'step' : undefined}
             >
               <span className="steps__dot" aria-hidden="true">
+                {/*
+                  One marker for the whole rail, mounted inside whichever step
+                  is current. Because every instance shares a layoutId, Motion
+                  reads the two positions as one element that moved and slides
+                  it from the step being left to the step being entered --
+                  which is the progress itself, rather than three rings taking
+                  turns lighting up. MotionConfig already stands layout
+                  animation down for a reader who asked for calm.
+                */}
+                {isCurrent && (
+                  <m.span
+                    layoutId="checkout-step-marker"
+                    className="steps__marker"
+                    transition={TRANSITION.layout}
+                  />
+                )}
                 <i className={`bi ${done ? 'bi-check-lg' : step.icon}`} />
               </span>
               <span className="steps__label">

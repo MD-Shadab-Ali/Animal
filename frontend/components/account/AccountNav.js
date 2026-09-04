@@ -9,6 +9,9 @@ const LINKS = [
   ['/account', 'My orders', 'bi-box-seam'],
   ['/account/bookings', 'Your stays', 'bi-house-door'],
   ['/account/payments', 'Payments', 'bi-credit-card'],
+  // The bell is for glancing at; this is where the record lives, so it needs a
+  // way in that does not depend on catching the panel first.
+  ['/account/notifications', 'Notifications', 'bi-bell'],
   ['/account/wishlist', 'Wishlist', 'bi-heart'],
   ['/account/addresses', 'Addresses', 'bi-geo-alt'],
   ['/account/profile', 'Profile', 'bi-person'],

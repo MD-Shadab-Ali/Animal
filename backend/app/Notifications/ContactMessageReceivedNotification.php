@@ -57,10 +57,10 @@ class ContactMessageReceivedNotification extends Notification implements ShouldQ
     public function toDatabase(object $notifiable): array
     {
         return [
-            'title'  => 'New contact message',
-            'body'   => $this->contactMessage->name.': '
+            'title' => 'New contact message',
+            'body' => $this->contactMessage->name.': '
                 .Str::limit($this->contactMessage->message, 60),
-            'url'    => '/admin/contact-messages/'.$this->contactMessage->id,
+            'url' => '/admin/contact-messages/'.$this->contactMessage->id,
             'format' => 'filament',
         ];
     }

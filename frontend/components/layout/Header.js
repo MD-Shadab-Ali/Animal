@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useSeller } from '@/context/SellerContext';
 import { ADMIN_URL } from '@/lib/admin';
+import NotificationBell from '@/components/layout/NotificationBell';
 import MobileNav from './MobileNav';
 
 export default function Header({ site }) {
@@ -97,6 +98,13 @@ export default function Header({ site }) {
               )}
 
               <div className="d-flex align-items-center gap-1 ms-auto">
+                {/*
+                  * First in the cluster, which is where the big shops put it --
+                  * and it renders nothing at all for a signed-out visitor, so
+                  * the row is unchanged for anyone without an account.
+                  */}
+                <NotificationBell />
+
                 <Link
                   href="/account/wishlist"
                   className="icon-btn d-none d-sm-inline-grid"

@@ -40,9 +40,9 @@ class SellerReadyForCollectionNotification extends Notification implements Shoul
     public function toDatabase(object $notifiable): array
     {
         return [
-            'title'  => 'Ready for collection',
-            'body'   => $this->item->goat_name.' from '.($this->item->seller?->farm_name ?? 'a seller'),
-            'url'    => '/admin/orders/'.$this->item->order_id,
+            'title' => 'Ready for collection',
+            'body' => $this->item->goat_name.' from '.($this->item->seller?->farm_name ?? 'a seller'),
+            'url' => '/admin/orders/'.$this->item->order_id,
             'format' => 'filament',
         ];
     }

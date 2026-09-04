@@ -31,9 +31,11 @@ class BookingsTable
         $currency = Setting::currencyCode();
 
         return $table
-            // Soonest arrival first: this screen is read in the morning to find
-            // out who is coming, not to browse history.
-            ->defaultSort('check_in')
+            // Newest booking first, as every other sales table is ordered: the
+            // list answers "what has just come in" by default. Who is arriving
+            // is a different question, and the arrival filters below answer it
+            // without making staff read a date column to find today.
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('booking_number')
                     ->label('Booking')
@@ -89,13 +91,37 @@ class BookingsTable
                     ->color(fn (?string $state) => Booking::STATUS_COLORS[$state] ?? 'gray')
                     ->sortable(),
 
+                // Shown by default, and to the minute: it is what the table is
+                // sorted by, so hiding it would leave the order looking arbitrary
+                // and several same-day bookings looking interchangeable.
                 TextColumn::make('created_at')
                     ->label('Booked')
-                    ->dateTime('d M Y')
+                    ->dateTime('d M Y, g:i a')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
             ])
             ->filters([
+                /*
+                 * Unconfirmed holds are kept out of the way, not thrown away.
+                 *
+                 * A booking exists from the moment a guest picks their nights,
+                 * before any money has moved, and this list is read as the list
+                 * of stays that are actually happening -- so a hold nobody has
+                 * paid for does not belong in it by default.
+                 *
+                 * A filter rather than a scope on the resource, deliberately.
+                 * That hold is keeping the room off the calendar: nothing in
+                 * the system expires one, and cancelling it here is the only
+                 * thing that hands those nights back. Made unreachable it would
+                 * become a room blocked for dates nobody can explain, so it
+                 * stays one click away, with the chip above the table saying
+                 * where it went.
+                 */
+                Filter::make('confirmed_only')
+                    ->label('Hide unconfirmed holds')
+                    ->default()
+                    ->query(fn ($query) => $query->where('status', '!=', 'placed')),
+
                 SelectFilter::make('status')->options(Booking::STATUSES),
 
                 SelectFilter::make('room_id')

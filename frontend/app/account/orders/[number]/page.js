@@ -234,18 +234,11 @@ export default function OrderDetailPage() {
    * lines, not from anything in the update itself.
    */
   const taggedAnimals = (order.items || [])
-    .map((item) => item.animal)
-    .filter((animal) => animal?.qr);
+    .filter((item) => item.animal?.qr)
+    // The listing name travels with the animal, so the caption under a code can
+    // say which goat it opens without reaching back into the line it came from.
+    .map((item) => ({ ...item.animal, listing: item.name }));
 
-  /*
-   * Which update the codes hang off. The photograph is where they belong --
-   * picture and code, read together at handover -- but an animal nobody has
-   * photographed still has a pen tag worth checking, so they fall back to the
-   * step the order is on rather than disappearing with the photo.
-   */
-  const codeRowIndex = updates.findIndex((entry) => entry.photo) >= 0
-    ? updates.findIndex((entry) => entry.photo)
-    : updates.findIndex((entry) => entry.status === order.status);
 
   return (
     <div className="d-grid gap-4">
@@ -462,7 +455,13 @@ export default function OrderDetailPage() {
               actually happened at each one. It matters most at Preparing: the
               listing photo was taken before the buyer ordered, and on a listing
               sold by weight it may not even be the animal they are getting. */}
-          {updates.length > 0 && (
+          {/*
+            * Renders when the farm has said something OR when an animal has
+            * been set aside. Keyed only on `updates` before, so an assigned
+            * goat with no photograph and no note left the buyer with no way to
+            * see its tag at all.
+            */}
+          {(updates.length > 0 || taggedAnimals.length > 0) && (
             <div className="panel">
               <h2 className="h6 mb-3">Updates from the farm</h2>
 
@@ -504,66 +503,68 @@ export default function OrderDetailPage() {
                   {/* Big enough to actually see the animal. This is the only
                       picture of the goat the buyer is really getting, so a
                       thumbnail defeats the point of taking it. */}
-                  {(entry.photo || index === codeRowIndex) && (
-                    <div className="d-flex align-items-start gap-3 flex-wrap mt-1">
-                      {entry.photo && (
-                        <a
-                          href={entry.photo}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="gallery__thumb d-block"
-                          style={{ flex: '1 1 16rem', maxWidth: 420, aspectRatio: '4 / 3' }}
-                        >
-                          <img
-                            src={entry.photo}
-                            alt={`Your goat at the ${BUYER_STATUS_LABELS[entry.status] || entry.label} step`}
-                          />
-                        </a>
-                      )}
-
-                      {/* The same code that is on the animal's pen, next to the
-                          photograph of it. Held up at handover the two either
-                          match or they do not, which is the whole point of the
-                          tag -- and it is a scan away from the animal's own
-                          page, so the check works without this one being open.
-
-                          Every assigned animal gets its own, captioned: one
-                          code beside a photograph of several would be claiming
-                          to identify whichever the buyer happened to look at. */}
-                      {index === codeRowIndex && taggedAnimals.map((animal) => (
-                        <figure className="mb-0 text-center" key={animal.qr}>
-                          <img
-                            src={animal.qr}
-                            alt={`Tag code for ${animal.tag || `the ${animal.weight_kg} kg goat`}`}
-                            style={{
-                              width: 104,
-                              height: 104,
-                              background: '#fff',
-                              padding: 6,
-                              borderRadius: 8,
-                            }}
-                          />
-                          {/* Without this the code is just a square. The
-                              weight and tag it used to repeat are on the page
-                              the scan opens, so printing them here as well only
-                              told the buyer what they already had. */}
-                          <figcaption className="small text-soft mt-1" style={{ maxWidth: '9rem' }}>
-                            {/* Named only when there is more than one, which is
-                                the case where the codes are otherwise
-                                indistinguishable squares. */}
-                            {taggedAnimals.length > 1 && (
-                              <strong className="text-ink d-block">
-                                {animal.tag || `${animal.weight_kg} kg`}
-                              </strong>
-                            )}
-                            Scan for more about this goat
-                          </figcaption>
-                        </figure>
-                      ))}
-                    </div>
+                  {entry.photo && (
+                    <a
+                      href={entry.photo}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="gallery__thumb d-block mt-1"
+                      style={{ width: '100%', maxWidth: 420, aspectRatio: '4 / 3' }}
+                    >
+                      <img
+                        src={entry.photo}
+                        alt={`Your goat at the ${BUYER_STATUS_LABELS[entry.status] || entry.label} step`}
+                      />
+                    </a>
                   )}
                 </div>
               ))}
+
+              {/*
+                * The code on the animal's pen, and it stands on its own.
+                *
+                * This used to hang off whichever update carried a photograph,
+                * which tied it to a field it has nothing to do with. An animal
+                * with no photograph on file, and staff who left no note,
+                * produced an update row with neither -- the row was filtered
+                * out, the panel disappeared, and the code went with it.
+                *
+                * The code comes from the animal's token. It exists the moment
+                * one is assigned, and it is what the buyer holds up against the
+                * tag at handover, so it cannot depend on whether anybody
+                * remembered to take a picture.
+                */}
+              {taggedAnimals.length > 0 && (
+                <div className={`d-flex align-items-start gap-3 flex-wrap ${updates.length > 0 ? 'update-row' : ''}`}>
+                  {taggedAnimals.map((animal) => (
+                    <figure className="mb-0 text-center" key={animal.qr}>
+                      <img
+                        src={animal.qr}
+                        alt={`Tag code for ${animal.tag || `the ${animal.weight_kg} kg goat`}`}
+                        style={{
+                          width: 104,
+                          height: 104,
+                          background: '#fff',
+                          padding: 6,
+                          borderRadius: 8,
+                        }}
+                      />
+                      {/* Which goat this code opens, named as the buyer knows
+                          it. A square with "scan me" under it says what to do
+                          and nothing about what it is; the name says both,
+                          because a code beside the name of the animal it
+                          belongs to is self-evidently worth scanning. */}
+                      <figcaption className="small text-soft mt-1" style={{ maxWidth: '9rem' }}>
+                        <strong className="text-ink d-block">{animal.listing}</strong>
+                        {/* The tag as well when there is more than one, which
+                            is the case where two codes under the same listing
+                            name would otherwise be indistinguishable. */}
+                        {taggedAnimals.length > 1 && (animal.tag || `${animal.weight_kg} kg`)}
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

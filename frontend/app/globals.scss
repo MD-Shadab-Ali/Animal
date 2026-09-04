@@ -160,6 +160,92 @@ button:disabled { cursor: not-allowed; }
   box-shadow: var(--shadow-md);
 }
 
+/*
+ * ── Beam button ──────────────────────────────────────────
+ *
+ * A light beam travelling round the edge of the primary action. Ported from the
+ * LightBeamButton pattern, and @property is the whole of it: an unregistered
+ * custom property is only a string to the browser, so --beam-angle would jump
+ * from 0deg to 360deg. Registered with a <angle> syntax it interpolates, and
+ * the conic gradient sweeps. Nothing here runs in JavaScript.
+ *
+ * The original is violet and cyan on a near-black page and says as much in its
+ * own README. The hero is a pale band and this is the site's one conversion
+ * button, so the beam is harvest gold through white instead: the same trick
+ * wearing our palette. Layered on .btn-cta, which keeps the sizing and the
+ * focus ring; this only takes over the surface.
+ *
+ * Where @property is unsupported the angle simply never moves and the button
+ * keeps a still gold-gradient edge, which is a fine place to land.
+ */
+@property --beam-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes beam-spin {
+  to { --beam-angle: 360deg; }
+}
+
+.btn-beam {
+  position: relative;
+  /* Establishes the stacking context the two layers below sit inside: without
+     it a negative z-index would drop them behind the page, not behind the
+     label. */
+  isolation: isolate;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* The beam. Fills the button, and the face below covers all but its edge. */
+.btn-beam::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--beam-angle),
+    transparent 0%,
+    var(--brand-accent) 22%,
+    #fde68a 38%,
+    #fff 46%,
+    #fde68a 54%,
+    transparent 72%
+  );
+  animation: beam-spin 2.4s linear infinite;
+}
+
+/*
+ * The face, inset by the width of the beam. The highlight is a separate
+ * background layer from the colour so the hover darkening still transitions --
+ * a gradient cannot be interpolated, a background-color can.
+ */
+.btn-beam::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: radial-gradient(circle at 50% 0%, rgb(255 255 255 / .22) 0%, transparent 62%);
+  background-color: var(--brand-accent);
+  transition: background-color var(--speed) var(--ease);
+}
+
+.btn-beam:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md), 0 0 22px -6px var(--brand-accent);
+}
+.btn-beam:hover::after { background-color: color-mix(in srgb, var(--brand-accent) 88%, #000); }
+.btn-beam:active { transform: translateY(1px); }
+
+/* A still edge reads as a border; a spinning one reads as an animation. */
+@media (prefers-reduced-motion: reduce) {
+  .btn-beam::before { animation: none; }
+}
+
 .btn-brand {
   background: var(--brand-primary);
   border: 1px solid var(--brand-primary);
@@ -828,27 +914,6 @@ button:disabled { cursor: not-allowed; }
 .popular-searches { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 
 /* ── Trust strip ─────────────────────────────────────────── */
-.trust-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-md);
-  padding: var(--space-lg) 0;
-  border-block: 1px solid var(--line);
-}
-.trust-item { display: flex; gap: .75rem; align-items: flex-start; }
-.trust-item__icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--brand-primary);
-  font-size: 1.2rem;
-}
-.trust-item strong { display: block; font-size: .9375rem; color: var(--ink); }
-.trust-item span { font-size: .8125rem; color: var(--muted); }
 
 /* ── Product card ────────────────────────────────────────── */
 .card-goat {
@@ -1105,6 +1170,25 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
  * between two different backgrounds already reads as a break without help.
  */
 .section:not(.bg-surface-alt) + .section:not(.bg-surface-alt) {
+  padding-top: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+/*
+ * And the case the exclusion above was never meant to cover: two tinted
+ * sections in a row.
+ *
+ * The reason for excluding a tinted band is that its padding is the height of
+ * the colour, and that a join between two backgrounds reads as a break on its
+ * own. Both of those describe a band that *starts* -- a tinted section after an
+ * untinted one. When the section above is already the same tint there is no
+ * join and no band opening here: the two paint as one continuous colour with
+ * 144px of nothing dropped into the middle of it, which is what sits between
+ * "Why buy from us" and "Our numbers".
+ *
+ * Trimming only the top keeps the bottom of the band deep, so the colour still
+ * closes properly under the last section in the run.
+ */
+.section.bg-surface-alt + .section.bg-surface-alt {
   padding-top: clamp(1rem, 2.5vw, 1.5rem);
 }
 
@@ -1532,6 +1616,17 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   flex-direction: column;
   gap: .875rem;
 }
+/*
+ * A .quote that has given up its own surface, the way .card-goat--bare does for
+ * the care guides: inside the marquee the border-glow wrapper is the card, and
+ * without this the two stack into a card inside a card. Opt-in, so a quote used
+ * anywhere without that wrapper keeps its own background.
+ */
+.quote--bare {
+  background: transparent;
+  border: 0;
+}
+
 .quote__stars { color: var(--brand-accent); letter-spacing: .12em; font-size: .9375rem; }
 .quote__text { color: var(--body); flex: 1; margin: 0; }
 .quote__by { display: flex; align-items: center; gap: .75rem; }
@@ -2120,6 +2215,68 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 .goat-tile__action:disabled { opacity: .65; cursor: not-allowed; }
 .goat-tile__action i { transition: transform var(--speed) var(--ease); }
 .goat-tile:hover .goat-tile__action i.bi-arrow-right { transform: translateX(4px); }
+
+/*
+ * ── Beam on a glass tile action ──────────────────────────
+ *
+ * The same travelling light as .btn-beam, rebuilt for a button you can see
+ * through. The hero stacks an opaque face over the beam and lets the rim show
+ * past it; doing that here would fill in the frosted glass and cost the card
+ * the photograph behind it. So the gradient is masked down to the ring instead
+ * -- one mask clipped to the content box, one over the whole box, composited to
+ * exclude -- which leaves the middle untouched and the backdrop-filter intact.
+ *
+ * inset -1px so the ring lands on the button's own border rather than just
+ * inside it, and background-color underneath for the same reason the hero
+ * needs one: where the cone is transparent you would otherwise see the photo
+ * through the ring, and the edge would look bitten rather than unlit.
+ *
+ * It lights on hover, not always. Twelve tiles to a shop page, each repainting
+ * a conic gradient every frame on and off screen, is a different proposition
+ * from one button in a hero -- and the gold hero button is the primary action
+ * only for as long as nothing else on the page is doing the same trick.
+ * Igniting on the lift the tile already performs makes the two one gesture.
+ */
+.goat-tile__action--beam::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--radius-md) + 1px);
+  padding: 2px;
+  /* Lighter than the glass it rims, not darker. A dark base disappears into
+     the tile and leaves the lit arc floating with no edge to travel along. */
+  background-color: rgb(255 255 255 / .22);
+  background-image: conic-gradient(
+    from var(--beam-angle),
+    #fff 0deg,
+    #fff 8deg,
+    var(--line-strong) 24deg,
+    transparent 54deg,
+    transparent 306deg,
+    var(--line-strong) 336deg,
+    #fff 352deg,
+    #fff 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--speed) var(--ease);
+  pointer-events: none;
+}
+
+.goat-tile:hover .goat-tile__action--beam::before,
+.goat-tile:focus-within .goat-tile__action--beam::before {
+  opacity: 1;
+  animation: beam-spin 2.4s linear infinite;
+}
+
+/* Still edges only, for anyone who asked for less movement. */
+@media (prefers-reduced-motion: reduce) {
+  .goat-tile:hover .goat-tile__action--beam::before,
+  .goat-tile:focus-within .goat-tile__action--beam::before { animation: none; }
+}
 
 /* Badges and the wishlist heart ride above the wash. */
 .goat-tile__tags {
@@ -2962,6 +3119,157 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   font-size: 1rem;
 }
 
+/* ── The notification bell ───────────────────────────────── */
+/*
+ * A panel anchored to the header icon, in the shape every large shop uses: a
+ * titled head with one action, a scrolling list of rows, and a way through to
+ * the full history. Nothing here is a new visual idea -- it borrows the panel
+ * radius, the surface tints and the brand green the account menu already uses,
+ * so the bell reads as part of the masthead rather than a guest in it.
+ */
+.notif { position: relative; }
+
+.notif__panel {
+  position: absolute;
+  top: calc(100% + .5rem);
+  right: 0;
+  z-index: 1050;
+  width: min(22rem, calc(100vw - 2rem));
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: notifIn 160ms var(--ease);
+}
+
+@keyframes notifIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.notif__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: .75rem var(--space-md);
+  border-bottom: 1px solid var(--line);
+}
+
+.notif__title { font-size: .9375rem; font-weight: 600; margin: 0; }
+
+.notif__clear {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+}
+.notif__clear:hover { text-decoration: underline; }
+.notif__clear:disabled { opacity: .6; }
+
+.notif__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Roughly six rows. Past that it is a history, and history has a page. */
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
+.notif__item {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  width: 100%;
+  padding: .75rem var(--space-md);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  text-align: left;
+  transition: background var(--speed) var(--ease);
+}
+.notif__item:hover { background: var(--surface-alt); }
+
+/* Unread carries a tint as well as the dot, so the difference survives being
+   seen out of the corner of an eye. */
+.notif__item.is-unread { background: var(--surface); }
+.notif__item.is-unread:hover { background: var(--surface-alt); }
+
+.notif__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--brand-primary);
+  font-size: .875rem;
+}
+
+/* One tint per kind, so a glance down the list separates money from movement. */
+.notif__icon--payment { background: #ecfdf5; color: #047857; }
+.notif__icon--refund { background: #fff7ed; color: var(--warning); }
+.notif__icon--booking { background: #eff6ff; color: #1d4ed8; }
+
+.notif__text { display: grid; gap: .125rem; min-width: 0; }
+
+.notif__item-title {
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.notif__body {
+  font-size: .75rem;
+  color: var(--muted);
+  line-height: 1.45;
+  /* Two lines, then an ellipsis: the row opens the thing it is about, so the
+     panel never has to carry the whole story. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notif__when { font-size: .6875rem; color: var(--muted); }
+
+.notif__dot {
+  flex: 0 0 auto;
+  width: .5rem;
+  height: .5rem;
+  margin-top: .375rem;
+  border-radius: 50%;
+  background: var(--brand-primary);
+}
+
+.notif__empty {
+  display: grid;
+  justify-items: center;
+  gap: .5rem;
+  padding: var(--space-xl) var(--space-md);
+  text-align: center;
+  color: var(--muted);
+  font-size: .8125rem;
+}
+.notif__empty i { font-size: 1.5rem; color: var(--line-strong); }
+
+.notif__all {
+  display: block;
+  padding: .75rem;
+  text-align: center;
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+  text-decoration: none;
+  background: var(--surface-alt);
+}
+.notif__all:hover { background: var(--surface); color: var(--ink); }
+
 /* ---------------------------------------------------------------- checkout */
 
 .checkout__head {
@@ -3001,12 +3309,20 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   height: 2px;
   margin: 0 .5rem;
   border-radius: 2px;
-  background: var(--line);
-  transition: background var(--speed) var(--ease);
+  /*
+   * Two layers: the green sits on top of the grey track at zero width, and
+   * completing a step grows it to full. Crossfading the colour said "this
+   * connector is green now"; growing it from the left says the buyer moved
+   * along it, which is the same thing the rail is there to report.
+   */
+  background:
+    linear-gradient(90deg, var(--brand-primary) 0 100%) left center / 0 100% no-repeat,
+    var(--line);
+  transition: background-size .55s var(--ease);
 }
 
 .steps__item.is-done::before,
-.steps__item.is-current::before { background: var(--brand-primary); }
+.steps__item.is-current::before { background-size: 100% 100%; }
 
 .steps__btn {
   display: inline-flex;
@@ -3028,6 +3344,10 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  /* Anchors the travelling marker, and isolates it so a negative z-index
+     lands behind the icon rather than behind the page. */
+  position: relative;
+  isolation: isolate;
   width: 34px;
   height: 34px;
   border: 2px solid var(--line);
@@ -3040,7 +3360,22 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 .steps__item.is-current .steps__dot {
   border-color: var(--brand-primary);
   color: var(--brand-primary);
-  box-shadow: 0 0 0 4px rgba(21, 128, 61, .12);
+}
+
+/*
+ * The ring that used to be a box-shadow on the current step.
+ *
+ * It is an element now because a shadow cannot move between two dots -- it can
+ * only switch off on one and on at the next. As a single element shared by
+ * layoutId it travels the rail, so the halo arriving is what tells the buyer
+ * the step changed, before they have read either label.
+ */
+.steps__marker {
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  border-radius: 50%;
+  background: rgb(21 128 61 / .14);
 }
 
 .steps__item.is-done .steps__dot {
@@ -3204,6 +3539,15 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+
+  /*
+   * Room for a hovered quote's glow to bloom. Clipping happens at the padding
+   * edge, so without this the halo is sliced flat along the top and bottom of
+   * the strip; the matching negative margin hands the space back to the layout,
+   * leaving the section exactly as tall as it was.
+   */
+  padding-block: var(--glow-padding, 40px);
+  margin-block: calc(var(--glow-padding, 40px) * -1);
 }
 
 .marquee__track {

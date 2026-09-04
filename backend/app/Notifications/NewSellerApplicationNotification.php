@@ -33,9 +33,9 @@ class NewSellerApplicationNotification extends Notification implements ShouldQue
     public function toDatabase(object $notifiable): array
     {
         return [
-            'title'  => 'New seller application',
-            'body'   => $this->seller->farm_name.' — '.$this->seller->city,
-            'url'    => '/admin/sellers/'.$this->seller->id.'/edit',
+            'title' => 'New seller application',
+            'body' => $this->seller->farm_name.' — '.$this->seller->city,
+            'url' => '/admin/sellers/'.$this->seller->id.'/edit',
             'format' => 'filament',
         ];
     }

@@ -18,7 +18,7 @@ class RefundSentNotification extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['mail', 'database'];
     }
 
     public function toMail(object $notifiable): MailMessage
@@ -56,5 +56,17 @@ class RefundSentNotification extends Notification implements ShouldQueue
             'View your '.$noun,
             $frontend.$subject->paymentSubjectPath(),
         );
+    }
+
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'kind' => 'refund',
+            'title' => 'Refund sent',
+            'body' => Setting::currencySymbol().number_format((float) $this->payment->amount, 2)
+                .' is on its way back to you for '.$this->payment->subjectLabel().'.',
+            'url' => $this->payment->storefrontUrl(),
+            'format' => 'filament',
+        ];
     }
 }

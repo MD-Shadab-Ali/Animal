@@ -38,9 +38,9 @@ class LowStockNotification extends Notification implements ShouldQueue
     public function toDatabase(object $notifiable): array
     {
         return [
-            'title'  => $this->goat->stock <= 0 ? 'Sold out' : 'Low stock',
-            'body'   => $this->goat->name.' — '.$this->goat->stock.' left',
-            'url'    => '/admin/goats/'.$this->goat->id.'/edit',
+            'title' => $this->goat->stock <= 0 ? 'Sold out' : 'Low stock',
+            'body' => $this->goat->name.' — '.$this->goat->stock.' left',
+            'url' => '/admin/goats/'.$this->goat->id.'/edit',
             'format' => 'filament',
         ];
     }

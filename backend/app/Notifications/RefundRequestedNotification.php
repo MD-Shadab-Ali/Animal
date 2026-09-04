@@ -47,8 +47,8 @@ class RefundRequestedNotification extends Notification implements ShouldQueue
     {
         return [
             'title' => 'Refund requested',
-            'body'  => $this->payment->subject()?->paymentReference().' — '.$this->payment->reference,
-            'url'   => '/admin/refunds',
+            'body' => $this->payment->subject()?->paymentReference().' — '.$this->payment->reference,
+            'url' => '/admin/refunds',
         ];
     }
 }

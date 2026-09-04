@@ -2,8 +2,12 @@
 
 namespace App\Filament\Resources\Goats\RelationManagers;
 
+use App\Models\GoatWeight;
 use App\Models\Setting;
+use App\Services\GoatQrArchive;
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -20,7 +24,9 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The actual goats behind this listing.
@@ -204,16 +210,89 @@ class WeightsRelationManager extends RelationManager
                 CreateAction::make()
                     ->label('Add a goat')
                     ->modalHeading('Add an animal to this listing'),
+
+                /*
+                 * The whole pen's tags at once, which is how they are printed.
+                 * Hidden while the listing has no animals rather than shown
+                 * and failing: an empty zip is not a file anybody can open.
+                 */
+                Action::make('downloadAllQr')
+                    ->label('Download all QR codes')
+                    ->icon('heroicon-o-qr-code')
+                    ->color('gray')
+                    ->visible(fn (): bool => $this->getOwnerRecord()->weights()->exists())
+                    ->action(fn (): StreamedResponse => $this->downloadQrArchive(
+                        $this->getOwnerRecord()->weights()->orderBy('weight_kg')->get()
+                    )),
             ])
             ->recordActions([
+                // Sits with the row, because the tag belongs to this animal:
+                // whoever is looking at the 17.5 kg goat is the one who wants
+                // its code, and reopening the edit form to reach it is a step
+                // that earns nothing.
+                Action::make('downloadQr')
+                    ->label('QR')
+                    ->icon('heroicon-o-qr-code')
+                    ->color('gray')
+                    ->tooltip(fn (GoatWeight $record): string => 'Download '.$record->qrFileName())
+                    ->action(function (GoatWeight $record): StreamedResponse {
+                        $jpeg = $record->qrJpeg(512);
+
+                        return response()->streamDownload(
+                            function () use ($jpeg) {
+                                echo $jpeg;
+                            },
+                            $record->qrFileName(),
+                            ['Content-Type' => 'image/jpeg'],
+                        );
+                    }),
+
                 EditAction::make(),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
-                BulkActionGroup::make([DeleteBulkAction::make()]),
+                BulkActionGroup::make([
+                    BulkAction::make('downloadQr')
+                        ->label('Download QR codes')
+                        ->icon('heroicon-o-qr-code')
+                        ->color('gray')
+                        ->action(fn (Collection $records): StreamedResponse => $this->downloadQrArchive($records))
+                        ->deselectRecordsAfterCompletion(),
+
+                    DeleteBulkAction::make(),
+                ]),
             ])
             ->emptyStateHeading('No individual goats listed')
             ->emptyStateDescription('Add them and the buyer picks from real weights. '
                 .'Until then this listing prices any weight in its range.');
+    }
+
+    /**
+     * These animals' codes, zipped and named after the listing they are under.
+     *
+     * The owner record is pushed onto every row before the names are worked
+     * out: each file is called after the listing, and reading that off the
+     * relationship one row at a time would be a query per goat for a name this
+     * page already has.
+     *
+     * @param  Collection<int, GoatWeight>  $weights
+     */
+    private function downloadQrArchive(Collection $weights): StreamedResponse
+    {
+        $listing = $this->getOwnerRecord();
+
+        $weights->each(fn (GoatWeight $weight) => $weight->setRelation('goat', $listing));
+
+        $archive = app(GoatQrArchive::class);
+        $path = $archive->write($weights);
+
+        return response()->streamDownload(
+            function () use ($path) {
+                readfile($path);
+                @unlink($path);
+            },
+            $archive->fileName($listing),
+            ['Content-Type' => 'application/zip'],
+        );
     }
 }

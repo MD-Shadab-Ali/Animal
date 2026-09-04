@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\ContentController;
 use App\Http\Controllers\Api\V1\GatewayPaymentController;
 use App\Http\Controllers\Api\V1\GoatController;
 use App\Http\Controllers\Api\V1\HomeController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PasswordResetController;
 use App\Http\Controllers\Api\V1\PaymentController;
@@ -179,6 +180,19 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         // The per-order history answers "is this one settled"; this answers
         // "what have I paid this shop", which no order page can.
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+
+        /*
+         * The bell. Read-and-mark only: nothing here creates a notification,
+         * because a notification is something the shop tells you, never
+         * something a browser can assert about itself.
+         */
+        Route::get('notifications', [NotificationController::class, 'index'])
+            ->name('notifications.index');
+        // Declared before the {id} route, or "read-all" is swallowed as an id.
+        Route::post('notifications/read-all', [NotificationController::class, 'readAll'])
+            ->name('notifications.read-all');
+        Route::post('notifications/{id}/read', [NotificationController::class, 'read'])
+            ->name('notifications.read');
         Route::get('orders/{orderNumber}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('orders/{orderNumber}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
         // Collection only: the buyer telling us they have set off.

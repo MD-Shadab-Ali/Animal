@@ -8,7 +8,6 @@ import SectionHeader from './SectionHeader';
 import StatsRow from './StatsRow';
 import StepList from './StepList';
 import Testimonials from './Testimonials';
-import TrustStrip from './TrustStrip';
 
 /**
  * The homepage is a list of admin-defined sections. This picks the right block
@@ -22,14 +21,22 @@ export default function SectionRenderer({ section }) {
     background_color: background, custom_html: customHtml,
   } = section;
 
-  // Full-bleed blocks render outside the standard section wrapper.
+  /*
+   * Full-bleed blocks render outside the standard section wrapper.
+   *
+   * A trust strip used to sit here, directly under the hero, saying the same
+   * four things as the "Why buy from us" section further down -- while the hero
+   * itself already carries a band with two of them. Three statements of one
+   * promise inside a screen and a half does not build confidence; it reads as a
+   * page with nothing else to say.
+   *
+   * What is left divides the work properly: the hero's own band is the glance,
+   * and "Why buy from us" is the explanation. That one is a HomeSection, so the
+   * farm can reword it without a deploy -- which the hardcoded strip never
+   * allowed.
+   */
   if (type === 'hero_slider') {
-    return (
-      <>
-        <Hero banners={data || []} />
-        <TrustStrip />
-      </>
-    );
+    return <Hero banners={data || []} />;
   }
 
   if (type === 'promo_banner') {
@@ -112,7 +119,7 @@ function renderBody(type, { data, config, customHtml }) {
 
     case 'featured_goats':
     case 'latest_goats':
-      return <GoatGrid goats={data || []} columns={config.columns || 4} />;
+      return <GoatGrid goats={data || []} columns={config.columns || 4} fillRows />;
 
     case 'why_choose_us':
       return <StepList items={config.items || []} />;

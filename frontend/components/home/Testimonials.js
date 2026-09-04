@@ -1,3 +1,5 @@
+import BorderGlow from '@/components/ui/BorderGlow';
+
 /**
  * Buyer quotes, drifting past on a loop.
  *
@@ -10,7 +12,7 @@
  */
 function Quote({ item }) {
   return (
-    <figure className="quote mb-0 h-100">
+    <figure className="quote quote--bare mb-0 h-100">
       <div className="quote__stars" aria-label={`${item.rating} out of 5 stars`}>
         {'★'.repeat(item.rating)}{'☆'.repeat(Math.max(0, 5 - item.rating))}
       </div>
@@ -42,13 +44,23 @@ export default function Testimonials({ items = [] }) {
       <div className="marquee__track">
         {items.map((item, index) => (
           <div className="marquee__item" key={`a-${index}`}>
-            <Quote item={item} />
+            {/*
+              Same edge glow the care guides use, and it pairs with the pause
+              this track already does on hover: the quote you reach for stops
+              and lights up together. The figure inside gives up its own
+              surface -- see .quote--bare.
+            */}
+            <BorderGlow className="flex-fill" borderRadius={20}>
+              <Quote item={item} />
+            </BorderGlow>
           </div>
         ))}
 
         {items.map((item, index) => (
           <div className="marquee__item" key={`b-${index}`} aria-hidden="true">
-            <Quote item={item} />
+            <BorderGlow className="flex-fill" borderRadius={20}>
+              <Quote item={item} />
+            </BorderGlow>
           </div>
         ))}
       </div>

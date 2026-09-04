@@ -4,6 +4,8 @@ namespace App\Observers;
 
 use App\Models\Booking;
 use App\Models\BookingStatusHistory;
+use App\Notifications\BookingPlacedNotification;
+use App\Notifications\BookingStatusChangedNotification;
 use App\Services\BookingService;
 use Illuminate\Validation\ValidationException;
 
@@ -38,6 +40,13 @@ class BookingObserver
         // down with it, which is the only acceptable outcome: a booking that
         // exists while holding no nights is a room sold to nobody.
         $this->bookings->hold($booking);
+
+        /*
+         * Told after the hold, never before. If the nights clash, this whole
+         * transaction rolls back -- and a guest who has been told about a room
+         * they were never given is worse off than one who was told nothing.
+         */
+        $booking->user?->notify(new BookingPlacedNotification($booking));
     }
 
     public function updating(Booking $booking): void
@@ -88,6 +97,14 @@ class BookingObserver
             ]);
 
             $booking->statusNote = null;
+
+            // The guest hears about every move their stay makes, the same way
+            // an order's buyer always has. Cancelling matters most: a guest who
+            // is not told is a guest who turns up.
+            $booking->user?->notify(new BookingStatusChangedNotification(
+                $booking,
+                (string) $booking->getOriginal('status'),
+            ));
         }
 
         if ($this->holdChanged($booking)) {

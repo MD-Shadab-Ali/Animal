@@ -6,7 +6,7 @@ const COLUMN_CLASSES = {
   4: 'row-cols-2 row-cols-md-3 row-cols-xl-4',
 };
 
-export default function GoatGrid({ goats = [], columns = 4, emptyMessage }) {
+export default function GoatGrid({ goats = [], columns = 4, emptyMessage, fillRows = false }) {
   if (!goats.length) {
     return (
       <div className="empty">
@@ -17,9 +17,18 @@ export default function GoatGrid({ goats = [], columns = 4, emptyMessage }) {
     );
   }
 
+  // A curated strip looks broken when its last row is nearly empty: five
+  // featured goats in a four-wide grid strands one card beside three blank
+  // slots, which reads as a hole in the page rather than the end of a list.
+  // Trimming back to whole rows closes it. Only the homepage passes this --
+  // on a catalogue, dropping the remainder would hide somebody's goat.
+  const visible = fillRows && goats.length >= columns
+    ? goats.slice(0, goats.length - (goats.length % columns))
+    : goats;
+
   return (
     <div className={`row g-3 g-lg-4 ${COLUMN_CLASSES[columns] || COLUMN_CLASSES[4]}`}>
-      {goats.map((goat, index) => (
+      {visible.map((goat, index) => (
         <div className="col" key={goat.id}>
           <GoatCard goat={goat} index={index} />
         </div>

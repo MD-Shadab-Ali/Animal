@@ -113,7 +113,7 @@ export default function GoatCard({ goat, index = 0 }) {
           nothing to choose, and keeps its one-click buy.
         */}
         {goat.is_available && !inCart && goat.pricing?.is_per_kg && (
-          <Link href={`/goats/${goat.slug}`} className="goat-tile__action">
+          <Link href={`/goats/${goat.slug}`} className="goat-tile__action goat-tile__action--beam">
             <span>Choose weight</span>
             <i className="bi bi-arrow-right" aria-hidden="true" />
           </Link>

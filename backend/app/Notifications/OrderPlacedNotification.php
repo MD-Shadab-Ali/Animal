@@ -17,7 +17,7 @@ class OrderPlacedNotification extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['mail', 'database'];
     }
 
     public function toMail(object $notifiable): MailMessage
@@ -44,5 +44,22 @@ class OrderPlacedNotification extends Notification implements ShouldQueue
             ->salutation('— The '.$siteName.' team');
 
         return $message;
+    }
+
+    /**
+     * The same news, kept where the buyer can find it again.
+     *
+     * An email is gone the moment it is archived. The bell is the record of
+     * what happened to an order, in the place they are already standing.
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'kind' => 'order',
+            'title' => 'Order '.$this->order->order_number.' placed',
+            'body' => 'We have it. You will hear from us as it moves along.',
+            'url' => '/account/orders/'.$this->order->order_number,
+            'format' => 'filament',
+        ];
     }
 }

@@ -128,7 +128,7 @@ export default function Hero({ banners = [] }) {
             </div>
 
             {slide.button_text && slide.button_link && (
-              <Link href={slide.button_link} className="btn btn-cta btn-lg">
+              <Link href={slide.button_link} className="btn btn-cta btn-lg btn-beam">
                 {slide.button_text}
                 <i className="bi bi-arrow-right" aria-hidden="true" />
               </Link>

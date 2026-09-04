@@ -65,7 +65,7 @@ export default function RoomCard({ room, index = 0, dates }) {
           {sleeps.included < sleeps.max && ` · covers ${sleeps.included}`}
         </span>
 
-        <Link href={`/homestay/${room.slug}${query}`} className="goat-tile__action">
+        <Link href={`/homestay/${room.slug}${query}`} className="goat-tile__action goat-tile__action--beam">
           <span>Check dates</span>
           <i className="bi bi-calendar-check" aria-hidden="true" />
         </Link>

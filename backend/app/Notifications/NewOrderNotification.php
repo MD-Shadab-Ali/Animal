@@ -45,10 +45,10 @@ class NewOrderNotification extends Notification implements ShouldQueue
     public function toDatabase(object $notifiable): array
     {
         return [
-            'title'  => 'New order '.$this->order->order_number,
-            'body'   => $this->order->customer_name.' — '.Setting::get('currency_symbol', '')
+            'title' => 'New order '.$this->order->order_number,
+            'body' => $this->order->customer_name.' — '.Setting::get('currency_symbol', '')
                         .number_format((float) $this->order->total),
-            'url'    => '/admin/orders/'.$this->order->id,
+            'url' => '/admin/orders/'.$this->order->id,
             'format' => 'filament',
         ];
     }
