@@ -50,7 +50,7 @@ class HomeSectionForm
                     Textarea::make('config')
                         ->hiddenLabel()
                         ->rows(8)
-                        ->helperText('Used for things like how many goats to show, or the items in the "Why choose us" and "Stats" blocks.')
+                        ->helperText('Used for things like how many goats to show, or the items in the "Why choose us" block.')
                         // The column is an array cast, so present it as readable JSON and parse it back.
                         ->formatStateUsing(fn ($state): string => filled($state)
                             ? json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)

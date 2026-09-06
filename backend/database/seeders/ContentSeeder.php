@@ -81,19 +81,11 @@ class ContentSeeder extends Seeder
             ['icon' => 'cash-coin', 'title' => 'Cash on delivery', 'text' => 'Inspect the animal first, then pay.'],
         ]];
 
-        $stats = ['items' => [
-            ['value' => '2,400+', 'label' => 'Goats delivered'],
-            ['value' => '12', 'label' => 'Years farming'],
-            ['value' => '64', 'label' => 'Districts covered'],
-            ['value' => '4.8/5', 'label' => 'Average rating'],
-        ]];
-
         $sections = [
             ['hero_slider', null, null, []],
             ['categories', 'Shop by purpose', 'Pick the right animal for what you need it for', ['limit' => 6, 'columns' => 3]],
             ['featured_goats', 'Featured goats', "Hand-picked from this week's stock", ['limit' => 8, 'columns' => 4]],
             ['why_choose_us', 'Why buy from us', 'Four things we will not compromise on', $why],
-            ['stats', 'Our numbers', null, $stats],
             ['latest_goats', 'Just added', 'Fresh listings from the farm', ['limit' => 8, 'columns' => 4]],
             ['promo_banner', null, null, ['placement' => 'promo_strip']],
             ['testimonials', 'What buyers say', 'Feedback from people who bought from us', ['limit' => 6]],

@@ -3,7 +3,7 @@
 import { AnimatePresence, m } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSettings } from '@/context/SiteContext';
 import { TRANSITION, swipeDirection } from '@/lib/motion';
 
@@ -21,17 +21,22 @@ const AUTOPLAY_MS = 6000;
 const wrap = (index, length) => ((index % length) + length) % length;
 
 /**
- * Search-first hero with a center-stage banner carousel.
+ * Search-first hero, staged on a full-bleed banner.
  *
- * The search bar is the call to action on a marketplace, so it keeps the left
- * column and the admin's banners rotate on the right. Every hero banner the
- * admin has published gets a turn: the headline, description and button on the
- * left belong to the slide on screen, so the four banners are four real
- * messages rather than one message and three unused images.
+ * The banner is the hero now: the active slide fills the whole band edge to
+ * edge and the copy sits on top of it, rather than the two splitting the width
+ * as a column of text beside a framed photo. A marketplace hero has one job --
+ * make the animal feel real and the search box feel obvious -- and a photo the
+ * size of the screen does the first half far better than a card can.
  *
- * The stage shows the neighbouring slides as narrow, faded peek frames. That is
- * the whole reason it reads as calm -- one frame is clearly the subject, and
- * the next one is a hint rather than a competitor.
+ * Legibility is a gradient, not a flat wash: a dark ramp runs in from the left
+ * behind the headline, a second lifts the bottom edge under the call to
+ * action, and the picture stays clear of both on the right.
+ *
+ * Everything the carousel could do before, it still does: autoplay with a
+ * progress bar, dots, thumbnails, arrow keys and a swipe. The swipe lives on
+ * the background layer, so .hero__inner passes the pointer through and only
+ * the things worth touching -- search box, chips, buttons -- take it back.
  */
 export default function Hero({ banners = [] }) {
   const router = useRouter();
@@ -51,7 +56,6 @@ export default function Hero({ banners = [] }) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [motionOk, setMotionOk] = useState(true);
-  const stageRef = useRef(null);
 
   const go = useCallback((index) => setActive(wrap(index, count)), [count]);
   const next = useCallback(() => setActive((i) => wrap(i + 1, count)), [count]);
@@ -89,17 +93,81 @@ export default function Hero({ banners = [] }) {
   const many = count > 1;
 
   return (
-    <section className="hero">
+    <section
+      className="hero hero--immersive"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label="Featured banners"
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
+      {/*
+        * mode="sync" is the one case where overlap is the point: the outgoing
+        * banner has to still be there for the incoming one to fade over, or
+        * the band flashes empty.
+        *
+        * touchAction: pan-y leaves vertical scrolling to the browser, so a
+        * swipe down the page still scrolls the page.
+        */}
+      <div className="hero__bg">
+        <AnimatePresence initial={false} mode="sync">
+          <m.div
+            key={active}
+            className="hero__bg-frame"
+            drag={many ? 'x' : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.14}
+            dragMomentum={false}
+            style={{ touchAction: 'pan-y' }}
+            onDragStart={() => setPaused(true)}
+            onDragEnd={(event, info) => {
+              setPaused(false);
+
+              const move = swipeDirection(info);
+
+              if (move === 1) next();
+              if (move === -1) prev();
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={TRANSITION.ambient}
+          >
+            {slide.image
+              ? <img src={slide.image} alt="" draggable={false} className="hero__bg-img" />
+              : <div className="hero__media-empty"><i className="bi bi-flower3" aria-hidden="true" /></div>}
+          </m.div>
+        </AnimatePresence>
+      </div>
+
+      <div className="hero__veil" aria-hidden="true" />
+
       <div className="container hero__inner">
-        <div className="row align-items-center g-4 g-lg-5">
-          <div className="col-lg-6">
+        <div className="row g-4 g-lg-5 align-items-end">
+          <div className="col-lg-7 hero__copy">
             {slide.subtitle && <span className="eyebrow mb-2 d-block">{slide.subtitle}</span>}
 
             <h1 className="hero__title">{slide.title || settings.site_name}</h1>
 
-            {slide.description && <p className="hero__lead mb-4">{slide.description}</p>}
+            {slide.description && <p className="hero__lead mb-3">{slide.description}</p>}
 
-            <div className="hero__search mb-3">
+            {/*
+              * Hover-pause is on the two panels rather than on the whole band.
+              * It used to sit on the framed carousel, which was a slice of the
+              * page; the band is the page, so the same handler there would
+              * stop the rotation for anyone whose cursor happened to be resting
+              * over the top of the window -- which is most people, most of the
+              * time. Hovering the search box or the thumbnails is a real signal
+              * that someone is busy with this slide. Focus still pauses the
+              * whole section: that one is always deliberate.
+              */}
+            <div
+              className="hero__search mb-3"
+              onMouseEnter={() => setPaused(true)}
+              onMouseLeave={() => setPaused(false)}
+            >
               <form onSubmit={search} role="search" className="searchbar mb-3">
                 <input
                   type="search"
@@ -135,138 +203,54 @@ export default function Hero({ banners = [] }) {
             )}
           </div>
 
-          <div className="col-lg-6">
-            <div
-              className="carousel-hero"
-              ref={stageRef}
-              role="region"
-              aria-roledescription="carousel"
-              aria-label="Featured banners"
-              tabIndex={0}
-              onKeyDown={onKeyDown}
-              onMouseEnter={() => setPaused(true)}
-              onMouseLeave={() => setPaused(false)}
-              onFocus={() => setPaused(true)}
-              onBlur={() => setPaused(false)}
-            >
-              <div className="carousel-hero__stage">
-                {many && (
-                  <div className="carousel-hero__peek carousel-hero__peek--left" aria-hidden="true">
-                    {slides[wrap(active - 1, count)].image
-                      ? <img src={slides[wrap(active - 1, count)].image} alt="" />
-                      : <div className="carousel-hero__blank" />}
-                  </div>
-                )}
-
-                <figure className="carousel-hero__slide">
-                  {/*
-                    * mode="sync" is the one case where overlap is the point:
-                    * the outgoing banner has to still be there for the
-                    * incoming one to fade over, or the frame flashes empty.
-                    *
-                    * The drag lives on this inner layer rather than on the
-                    * figure around it. The figure is what clips -- dragging it
-                    * would move the whole framed box and could push the page
-                    * sideways on a phone; dragging inside the frame cannot
-                    * escape it. touchAction: pan-y leaves vertical scrolling
-                    * to the browser, so a swipe down the page still scrolls.
-                    */}
-                  <AnimatePresence initial={false} mode="sync">
-                    <m.div
-                      key={active}
-                      className="carousel-hero__media"
-                      drag={many ? 'x' : false}
-                      dragConstraints={{ left: 0, right: 0 }}
-                      dragElastic={0.18}
-                      dragMomentum={false}
-                      style={{ touchAction: 'pan-y' }}
-                      onDragStart={() => setPaused(true)}
-                      onDragEnd={(event, info) => {
-                        setPaused(false);
-
-                        const move = swipeDirection(info);
-
-                        if (move === 1) next();
-                        if (move === -1) prev();
-                      }}
-                      initial={{ opacity: 0, scale: 1.03 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={TRANSITION.ambient}
+          {many && (
+            <div className="col-lg-5">
+              <div
+                className="carousel-hero hero__controls"
+                onMouseEnter={() => setPaused(true)}
+                onMouseLeave={() => setPaused(false)}
+              >
+                <div className="carousel-hero__thumbs">
+                  {slides.map((item, index) => (
+                    <button
+                      key={item.id ?? index}
+                      type="button"
+                      className={`carousel-hero__thumb ${index === active ? 'is-active' : ''}`}
+                      onClick={() => go(index)}
+                      aria-label={`Show ${item.title || `banner ${index + 1}`}`}
                     >
-                      {slide.image
-                        ? <img src={slide.image} alt={slide.title || ''} draggable={false} />
-                        : <div className="hero__media-empty"><i className="bi bi-flower3" aria-hidden="true" /></div>}
-                    </m.div>
-                  </AnimatePresence>
+                      {item.image
+                        ? <img src={item.image} alt="" />
+                        : <span className="carousel-hero__blank" />}
+                    </button>
+                  ))}
+                </div>
 
-                  <div className="carousel-hero__scrim" aria-hidden="true" />
+                {/* Keyed on the slide so the fill restarts its run each time. */}
+                <div className="carousel-hero__progress">
+                  <span
+                    key={active}
+                    className={paused || !motionOk ? '' : 'is-running'}
+                    style={{ animationDuration: `${AUTOPLAY_MS}ms` }}
+                  />
+                </div>
 
-                  <figcaption className="carousel-hero__caption">
-                    {slide.subtitle && <span className="carousel-hero__eyebrow">{slide.subtitle}</span>}
-                    <strong>{slide.title}</strong>
-                  </figcaption>
-                </figure>
-
-                {many && (
-                  <div className="carousel-hero__peek carousel-hero__peek--right" aria-hidden="true">
-                    {slides[wrap(active + 1, count)].image
-                      ? <img src={slides[wrap(active + 1, count)].image} alt="" />
-                      : <div className="carousel-hero__blank" />}
-                  </div>
-                )}
-              </div>
-
-              {many && (
-                <>
-                  {/* Keyed on the slide so the fill restarts its run each time. */}
-                  <div className="carousel-hero__progress">
-                    <span
-                      key={active}
-                      className={paused || !motionOk ? '' : 'is-running'}
-                      style={{ animationDuration: `${AUTOPLAY_MS}ms` }}
+                <div className="carousel-hero__dots" role="tablist" aria-label="Choose a banner">
+                  {slides.map((item, index) => (
+                    <button
+                      key={item.id ?? index}
+                      type="button"
+                      role="tab"
+                      className={`carousel-hero__dot ${index === active ? 'is-active' : ''}`}
+                      aria-selected={index === active}
+                      aria-label={item.title || `Banner ${index + 1}`}
+                      onClick={() => go(index)}
                     />
-                  </div>
-
-                  <div className="carousel-hero__dots" role="tablist" aria-label="Choose a banner">
-                    {slides.map((item, index) => (
-                      <button
-                        key={item.id ?? index}
-                        type="button"
-                        role="tab"
-                        className={`carousel-hero__dot ${index === active ? 'is-active' : ''}`}
-                        aria-selected={index === active}
-                        aria-label={item.title || `Banner ${index + 1}`}
-                        onClick={() => go(index)}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="carousel-hero__thumbs">
-                    {slides.map((item, index) => (
-                      <button
-                        key={item.id ?? index}
-                        type="button"
-                        className={`carousel-hero__thumb ${index === active ? 'is-active' : ''}`}
-                        onClick={() => go(index)}
-                        aria-label={`Show ${item.title || `banner ${index + 1}`}`}
-                      >
-                        {item.image
-                          ? <img src={item.image} alt="" />
-                          : <span className="carousel-hero__blank" />}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <div className="hero__stat">
-                <div><b>Vet checked</b><span>Every animal</span></div>
-                <div><b>Cash on delivery</b><span>Pay at your door</span></div>
-                <div><b>77 districts</b><span>Across Nepal</span></div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </section>

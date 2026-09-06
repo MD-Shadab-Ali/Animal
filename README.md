@@ -168,7 +168,7 @@ admin-entered copy, its `config`, and the **data already resolved** for it:
 [
   { "type": "hero_slider",    "data": [ ...banners ] },
   { "type": "featured_goats", "title": "Featured goats", "config": { "limit": 8 }, "data": [ ...goats ] },
-  { "type": "stats",          "title": "Our numbers", "config": { "items": [ ... ] } }
+  { "type": "why_choose_us",  "title": "Why buy from us", "config": { "items": [ ... ] } }
 ]
 ```
 

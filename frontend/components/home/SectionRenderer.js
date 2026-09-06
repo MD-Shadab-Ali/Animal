@@ -5,7 +5,6 @@ import FaqAccordion from './FaqAccordion';
 import Hero from './Hero';
 import PostGrid from './PostGrid';
 import SectionHeader from './SectionHeader';
-import StatsRow from './StatsRow';
 import StepList from './StepList';
 import Testimonials from './Testimonials';
 
@@ -91,7 +90,7 @@ export default function SectionRenderer({ section }) {
   const body = renderBody(type, { data, config, customHtml });
   if (!body) return null;
 
-  const centered = ['why_choose_us', 'stats', 'testimonials', 'faq'].includes(type);
+  const centered = ['why_choose_us', 'testimonials', 'faq'].includes(type);
   const shopLink = ['featured_goats', 'latest_goats'].includes(type);
 
   return (
@@ -123,9 +122,6 @@ function renderBody(type, { data, config, customHtml }) {
 
     case 'why_choose_us':
       return <StepList items={config.items || []} />;
-
-    case 'stats':
-      return <StatsRow items={config.items || []} />;
 
     case 'testimonials':
       return <Testimonials items={data || []} />;

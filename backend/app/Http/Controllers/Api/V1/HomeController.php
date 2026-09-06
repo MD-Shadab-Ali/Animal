@@ -103,7 +103,7 @@ class HomeController extends Controller
                 Post::with('category')->published()->latest('published_at')->limit($limit)->get()
             ),
 
-            // why_choose_us, stats, cta and custom_html render straight from `config`.
+            // why_choose_us, cta and custom_html render straight from `config`.
             default => null,
         };
     }

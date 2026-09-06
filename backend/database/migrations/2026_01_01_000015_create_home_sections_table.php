@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('home_sections', function (Blueprint $table) {
             $table->id();
             // hero_slider, featured_goats, categories, latest_goats, promo_banner,
-            // testimonials, faq, blog, why_choose_us, cta, stats, custom_html
+            // testimonials, faq, blog, why_choose_us, cta, custom_html
             $table->string('type');
             $table->string('title')->nullable();
             $table->string('subtitle')->nullable();

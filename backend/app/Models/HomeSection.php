@@ -28,7 +28,6 @@ class HomeSection extends Model
         'latest_goats'   => 'Latest goats',
         'promo_banner'   => 'Promo banner',
         'why_choose_us'  => 'Why choose us',
-        'stats'          => 'Stats counter',
         'testimonials'   => 'Testimonials',
         'faq'            => 'FAQ',
         'blog'           => 'Latest blog posts',

@@ -740,136 +740,181 @@ button:disabled { cursor: not-allowed; }
 
 .hero__media-empty { width: 100%; height: 100%; display: grid; place-items: center; color: var(--line-strong); font-size: 4rem; }
 
-/* ── Hero banner carousel ────────────────────────────────────
-   One large active frame with the neighbouring slides showing as
-   narrow faded peeks. Depth is soft shadow only, never a hard offset,
-   and the accent stays on var(--brand-primary) so the whole thing
-   still follows the brand colour an admin sets in Site settings. */
-.carousel-hero {
-  --slide-shadow: 0 30px 60px -18px rgba(15, 23, 42, .28), 0 8px 24px -12px rgba(15, 23, 42, .18);
-  --peek-shadow: 0 18px 40px -22px rgba(15, 23, 42, .22);
-  --slide-ease: cubic-bezier(.22, 1, .36, 1);
+/* ── Immersive hero: the banner is the background ─────────────
+   The active slide fills the band edge to edge and the copy sits on
+   top of it. Two things make that readable rather than merely big:
+   a dark ramp running in from the left, strongest exactly where the
+   headline and the search card are and nearly gone on the right
+   where the animal is; and glass rather than white for the panels,
+   so the photo carries on showing through what sits over it. */
+.hero--immersive {
+  /* One ink for every scrim on the band -- a desaturated forest rather
+     than black, so the veil never turns a green photo grey. */
+  --hero-shade: 6, 32, 21;
+  --hero-ink-soft: rgba(255, 255, 255, .84);
+  --hero-glass: rgba(255, 255, 255, .13);
+  --hero-glass-line: rgba(255, 255, 255, .28);
 
-  position: relative;
+  display: flex;
+  align-items: flex-end;
+  /*
+   * Sized to end at the fold, not past it. The band plus the 125px of header
+   * and promo above it has to clear a 768px laptop, and the call to action is
+   * the last thing in it -- every measure below the headline is a notch
+   * tighter than the site default so that it lands above the crease.
+   */
+  min-height: clamp(30rem, 70vh, 44rem);
+  /* Shows for the moment before the first banner paints, and behind the
+     elastic edge of a swipe. Dark, so neither reads as a flash. */
+  background: rgb(var(--hero-shade));
+  border-end-start-radius: var(--radius-xl);
+  border-end-end-radius: var(--radius-xl);
   outline: none;
 }
-.carousel-hero:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 6px; border-radius: var(--radius-xl); }
-
-.carousel-hero__stage { display: flex; align-items: center; justify-content: center; gap: .75rem; }
-@media (min-width: 576px) { .carousel-hero__stage { gap: 1.25rem; } }
-
-.carousel-hero__peek {
-  display: none;
-  position: relative;
-  flex: 0 0 13%;
-  aspect-ratio: 3 / 4;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  opacity: .85;
-  box-shadow: var(--peek-shadow);
-  box-shadow: var(--peek-shadow), 0 0 0 1px rgba(0, 0, 0, .05);
+.hero--immersive:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-secondary) 70%, #fff);
+  outline-offset: -6px;
 }
-@media (min-width: 576px) { .carousel-hero__peek { display: block; } }
-.carousel-hero__peek img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.1); }
-/* The fade is what makes a neighbour read as a hint instead of a rival. */
-.carousel-hero__peek::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-}
-.carousel-hero__peek--left::after { background: linear-gradient(90deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .15)); }
-.carousel-hero__peek--right::after { background: linear-gradient(270deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .15)); }
 
-.carousel-hero__slide {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface);
-  box-shadow: var(--slide-shadow), 0 0 0 1px rgba(0, 0, 0, .05);
-}
-.carousel-hero__slide img {
+.hero__bg { position: absolute; inset: 0; z-index: 0; }
+.hero__bg-frame { position: absolute; inset: 0; }
+/*
+ * A slow drift, not a zoom. The frame rests at 1.06 rather than 1 so the
+ * elastic end of a swipe has somewhere to travel into, and object-position
+ * sits above centre because the subject of a livestock photo is the animal,
+ * which is rarely in the bottom half of the frame.
+ */
+.hero__bg-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center 42%;
+  transform: scale(1.06);
+  animation: hero-drift 22s var(--ease) forwards;
 }
+@keyframes hero-drift {
+  from { transform: scale(1.16) translate3d(1.2%, 0, 0); }
+  to { transform: scale(1.06) translate3d(0, 0, 0); }
+}
+.hero--immersive .hero__media-empty { background: rgb(var(--hero-shade)); color: rgba(255, 255, 255, .18); }
 
-/* One banner's worth of frame, stacked on the last one so the two can cross
-   over. The keyframe that used to fade a slide in lived on the img above and
-   could only ever animate the arriving banner; Motion owns both halves now,
-   and honours prefers-reduced-motion through MotionConfig in providers.js. */
-.carousel-hero__media {
+/* Layered rather than one flat wash: sideways for the copy, upward for the
+   foot of the band, and a last touch back in on the right so the picture has
+   an edge instead of running out of the frame at full brightness. */
+.hero__veil {
   position: absolute;
   inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(100deg,
+      rgba(var(--hero-shade), .93) 0%,
+      rgba(var(--hero-shade), .84) 30%,
+      rgba(var(--hero-shade), .52) 56%,
+      rgba(var(--hero-shade), .16) 78%,
+      rgba(var(--hero-shade), .38) 100%),
+    linear-gradient(0deg,
+      rgba(var(--hero-shade), .72) 0%,
+      rgba(var(--hero-shade), .14) 38%,
+      transparent 64%);
 }
-.carousel-hero__media img,
-.carousel-hero__media .hero__media-empty {
+
+/*
+ * The swipe lives on the banner underneath, so the content layer has to let
+ * the pointer through -- otherwise the columns over it would swallow every
+ * drag that did not begin in the margins. Only the things there is a reason
+ * to touch take it back.
+ */
+.hero--immersive .hero__inner {
   width: 100%;
-  height: 100%;
-}
-
-.carousel-hero__blank { width: 100%; height: 100%; background: var(--surface); display: block; }
-
-/* Both of these sit over the banner, and the banner is what gets swiped, so
-   neither may swallow the pointer. They are decoration and a label; there is
-   nothing in either to click. */
-.carousel-hero__scrim {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(0deg, rgba(15, 23, 42, .45), transparent 55%);
-}
-
-.carousel-hero__caption {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  padding: 1.25rem;
+  padding-block: clamp(2rem, 5vw, 3rem) clamp(1.5rem, 3vw, 2.25rem);
   pointer-events: none;
 }
-.carousel-hero__caption strong { display: block; color: #fff; font-size: 1rem; font-weight: 600; }
-.carousel-hero__eyebrow {
-  display: block;
-  font-size: .6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .18em;
-  color: var(--line-strong);
-  margin-bottom: .125rem;
+.hero--immersive .hero__inner :is(a, button, input, form, .hero__search, .hero__controls) {
+  pointer-events: auto;
 }
+
+.hero--immersive .eyebrow { color: color-mix(in srgb, var(--brand-accent) 30%, #fff); }
+.hero--immersive .hero__title {
+  color: #fff;
+  margin-bottom: .625rem;
+  text-wrap: balance;
+  text-shadow: 0 2px 30px rgba(0, 0, 0, .35);
+}
+.hero--immersive .hero__lead {
+  color: var(--hero-ink-soft);
+  max-width: 46ch;
+  text-shadow: 0 1px 16px rgba(0, 0, 0, .35);
+}
+
+.hero--immersive .hero__search {
+  max-width: 34rem;
+  background: var(--hero-glass);
+  border-color: var(--hero-glass-line);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 26px 60px -28px rgba(0, 0, 0, .75);
+}
+.hero--immersive .searchbar { background: #fff; border-color: transparent; }
+.hero--immersive .hero__search .text-soft { color: rgba(255, 255, 255, .8) !important; }
+.hero--immersive .popular-searches .chip {
+  background: rgba(255, 255, 255, .14);
+  border-color: var(--hero-glass-line);
+  color: #fff;
+}
+.hero--immersive .popular-searches .chip:hover {
+  background: #fff;
+  border-color: #fff;
+  color: var(--brand-primary);
+}
+
+/* ── Hero banner controls ────────────────────────────────────
+   Thumbnails, an autoplay fill and dots, stacked into the bottom
+   right of the band so they read as one cluster and never compete
+   with the headline for the same corner. */
+.carousel-hero { position: relative; }
+
+.hero__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .875rem;
+}
+@media (min-width: 992px) { .hero__controls { align-items: flex-end; } }
+
+.carousel-hero__blank { width: 100%; height: 100%; background: rgba(255, 255, 255, .12); display: block; }
+
 .carousel-hero__progress {
-  max-width: 20rem;
+  width: 100%;
+  max-width: 13rem;
   height: 4px;
-  margin: 1.75rem auto 0;
   border-radius: var(--radius-pill);
-  background: var(--line);
+  background: rgba(255, 255, 255, .28);
   overflow: hidden;
 }
-.carousel-hero__progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand-primary); }
+.carousel-hero__progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: #fff; }
 .carousel-hero__progress span.is-running { animation: carousel-progress linear forwards; }
 @keyframes carousel-progress { from { width: 0; } to { width: 100%; } }
 
-.carousel-hero__dots { display: flex; justify-content: center; gap: .625rem; margin-top: 1.25rem; }
+.carousel-hero__dots { display: flex; gap: .625rem; }
 .carousel-hero__dot {
   width: 8px;
   height: 8px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-pill);
-  background: var(--line-strong);
+  background: rgba(255, 255, 255, .45);
   transition: width var(--speed) var(--ease), background var(--speed) var(--ease);
 }
-.carousel-hero__dot:hover { background: var(--muted); }
+.carousel-hero__dot:hover { background: rgba(255, 255, 255, .75); }
 /* Active state is said three ways at once -- stretched dot, progress fill,
    ringed thumbnail -- so it survives at a glance and without colour. */
-.carousel-hero__dot.is-active { width: 28px; background: var(--brand-primary); }
+.carousel-hero__dot.is-active { width: 28px; background: #fff; }
 
-.carousel-hero__thumbs { display: flex; justify-content: center; gap: .75rem; margin-top: 2.25rem; }
+.carousel-hero__thumbs { display: flex; gap: .625rem; }
+/* Bright rings rather than brand green: the thumbnails sit on the photo now,
+   and green on green is exactly where an active state goes missing. */
 .carousel-hero__thumb {
-  width: 4rem;
+  width: 4.25rem;
   flex: 0 0 auto;
   aspect-ratio: 16 / 10;
   padding: 0;
@@ -877,39 +922,44 @@ button:disabled { cursor: not-allowed; }
   border-radius: var(--radius-sm);
   overflow: hidden;
   opacity: .6;
-  background: var(--surface);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, .05);
-  transition: opacity var(--speed) var(--ease), width var(--speed) var(--ease);
+  background: rgba(255, 255, 255, .12);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .3);
+  transition: opacity var(--speed) var(--ease), width var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
 }
 .carousel-hero__thumb img { width: 100%; height: 100%; object-fit: cover; }
-.carousel-hero__thumb:hover { opacity: 1; }
+.carousel-hero__thumb:hover { opacity: .9; }
 .carousel-hero__thumb.is-active {
-  width: 5rem;
+  width: 5.75rem;
   opacity: 1;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--brand-primary);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .95), 0 16px 30px -16px rgba(0, 0, 0, .85);
 }
 
-.hero__stat {
-  margin-top: 1.5rem;
-  background: rgba(255, 255, 255, .94);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: .75rem 1rem;
-  display: flex;
-  justify-content: space-around;
-  gap: .5rem;
-  box-shadow: var(--shadow-md);
+@media (max-width: 991.98px) {
+  /* Stacked, the band is as tall as its content already; a floor as well
+     would only open a gap under the trust bar. */
+  .hero--immersive { min-height: 0; }
+  .hero--immersive .hero__title { text-shadow: 0 2px 24px rgba(0, 0, 0, .5); }
+  /*
+   * Nothing sits to the right of the copy at this width, so the ramp has to
+   * come from top and bottom instead. Sideways would darken the half of the
+   * photo the animal is in and leave the headline sitting on open sky.
+   */
+  .hero__veil {
+    background: linear-gradient(180deg,
+      rgba(var(--hero-shade), .84) 0%,
+      rgba(var(--hero-shade), .58) 38%,
+      rgba(var(--hero-shade), .70) 70%,
+      rgba(var(--hero-shade), .90) 100%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   /* The slide crossfade is Motion's now, and MotionConfig reducedMotion="user"
-     in providers.js already stands it down. Only the progress fill is still
-     driven from here. */
+     in providers.js already stands it down. The autoplay fill and the banner
+     drift are still driven from here. */
   .carousel-hero__progress span.is-running { animation: none; }
+  .hero__bg-img { animation: none; }
 }
-.hero__stat b { display: block; color: var(--ink); font-family: var(--font-heading), sans-serif; font-size: 1.05rem; }
-.hero__stat span { font-size: .75rem; color: var(--muted); }
 
 .popular-searches { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 
@@ -1166,10 +1216,29 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
  *
  * Sections on a tinted band are excluded on purpose. There the padding is not
  * only spacing, it is the height of the colour itself: trimming the top would
- * leave the band shallower above its heading than below it, and the join
- * between two different backgrounds already reads as a break without help.
+ * leave the band shallower above its heading than below it. The double-count
+ * is still real at that join, so the rule below takes it off the other side.
  */
 .section:not(.bg-surface-alt) + .section:not(.bg-surface-alt) {
+  padding-top: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+/*
+ * The same double-count on the two edges of a tinted band.
+ *
+ * The band cannot give up either padding -- those two values are the height of
+ * the colour above its heading and below its last row, and dropping one would
+ * leave it lopsided. Its plain neighbours can: their padding on that join is
+ * only air, and the colour starting or stopping is the break between the two
+ * on its own.
+ *
+ * Taking it off the plain side leaves 96px at each edge, the same as a plain
+ * pair, with the band still opening and closing as deep as it did.
+ */
+.section:not(.bg-surface-alt):has(+ .section.bg-surface-alt) {
+  padding-bottom: clamp(1rem, 2.5vw, 1.5rem);
+}
+.section.bg-surface-alt + .section:not(.bg-surface-alt) {
   padding-top: clamp(1rem, 2.5vw, 1.5rem);
 }
 
@@ -1182,8 +1251,7 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
  * own. Both of those describe a band that *starts* -- a tinted section after an
  * untinted one. When the section above is already the same tint there is no
  * join and no band opening here: the two paint as one continuous colour with
- * 144px of nothing dropped into the middle of it, which is what sits between
- * "Why buy from us" and "Our numbers".
+ * 144px of nothing dropped into the middle of it.
  *
  * Trimming only the top keeps the bottom of the band deep, so the colour still
  * closes properly under the last section in the run.
@@ -1594,17 +1662,6 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
 }
 .step h3 { font-size: 1rem; margin-bottom: .25rem; }
 .step p { font-size: .9375rem; color: var(--muted); margin: 0; }
-
-.stat-block { text-align: center; }
-.stat-block b {
-  display: block;
-  font-family: var(--font-heading), sans-serif;
-  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  font-weight: 700;
-  color: var(--brand-primary);
-  line-height: 1.1;
-}
-.stat-block span { font-size: .875rem; color: var(--muted); }
 
 .quote {
   height: 100%;
@@ -3464,14 +3521,14 @@ main > .section-tight:first-child { padding-top: clamp(1rem, 2.5vw, 1.5rem); }
     width: 8px;
     height: 8px;
     border-radius: var(--radius-pill);
-    background: var(--line-strong);
+    background: rgba(255, 255, 255, .45);
     transition: width var(--speed) var(--ease), background-color var(--speed) var(--ease);
   }
   /* Beats the unscoped `.is-active { width: 28px }` above: the pill that
      shows which slide you are on moves to the ::after, so the button itself
      can stay a full 44 wide like its neighbours. */
   .carousel-hero__dot.is-active { width: 44px; background: transparent; }
-  .carousel-hero__dot.is-active::after { width: 28px; background: var(--brand-primary); }
+  .carousel-hero__dot.is-active::after { width: 28px; background: #fff; }
 
   /*
    * Footer and menu lists sat at 20px a row with the rows nearly touching,
